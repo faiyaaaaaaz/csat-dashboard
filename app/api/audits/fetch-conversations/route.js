@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const INTERCOM_PER_PAGE = 150;
 const MAX_FETCH_PAGES_PER_DAY = 50;
-const LOW_CSAT_SCORES = [3, 4, 5];
+const DEFAULT_CONVERSATION_RATINGS = [3, 4, 5];
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -73,6 +73,72 @@ function normalizeEmail(value) {
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function normalizeKey(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function normalizeNumberSelections(values, fallback = []) {
+  const source = Array.isArray(values) ? values : fallback;
+  const result = [];
+
+  for (const value of source || []) {
+    const text = String(value ?? "").trim().toLowerCase();
+    if (!text || text === "all" || text === "any") return [];
+    const number = Number(text);
+    if (Number.isInteger(number) && number >= 1 && number <= 5 && !result.includes(number)) {
+      result.push(number);
+    }
+  }
+
+  return result.sort((a, b) => a - b);
+}
+
+function normalizeTextSelections(values) {
+  return Array.from(
+    new Set((Array.isArray(values) ? values : []).map((value) => normalizeText(value)).filter(Boolean))
+  );
+}
+
+function numberMatchesFilter(value, selectedNumbers) {
+  if (!Array.isArray(selectedNumbers) || selectedNumbers.length === 0) return true;
+  const number = Number(value);
+  return Number.isFinite(number) && selectedNumbers.includes(number);
+}
+
+function textMatchesFilter(value, selectedValues) {
+  if (!Array.isArray(selectedValues) || selectedValues.length === 0) return true;
+  const key = normalizeKey(value);
+  if (!key) return false;
+  const selected = new Set(selectedValues.map(normalizeKey));
+  return selected.has(key);
+}
+
+function firstScoreValue(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    const number = Number(text);
+    if (Number.isFinite(number)) return number;
+  }
+  return "";
+}
+
+function getCxScoreFromConversation(conversation) {
+  const custom = conversation?.custom_attributes || {};
+  return firstScoreValue(
+    custom?.cx_score_rating,
+    custom?.cx_score,
+    custom?.CXScoreRating,
+    custom?.CXScore,
+    custom?.["CX Score Rating"],
+    custom?.["CX Score"],
+    custom?.customer_experience_score,
+    custom?.quality_score,
+    conversation?.cx_score_rating,
+    conversation?.cx_score
+  );
 }
 
 function getRequestMeta(request) {
@@ -307,6 +373,12 @@ function extractConversationPreview(conversation) {
       conversation?.conversation_rating?.rating ??
       conversation?.conversation_rating?.value ??
       "",
+    conversationRating:
+      conversation?.conversation_rating?.score ??
+      conversation?.conversation_rating?.rating ??
+      conversation?.conversation_rating?.value ??
+      "",
+    cxScoreRating: getCxScoreFromConversation(conversation),
     clientEmail: firstNonEmpty(
       conversation?.contacts?.contacts?.[0]?.email,
       conversation?.source?.author?.email,
@@ -318,27 +390,32 @@ function extractConversationPreview(conversation) {
   };
 }
 
-function buildSearchBody({ sinceTs, untilTs, startingAfter }) {
+function buildSearchBody({ sinceTs, untilTs, startingAfter, conversationRatings }) {
+  const values = [
+    {
+      field: "conversation_rating.replied_at",
+      operator: ">",
+      value: Number(sinceTs),
+    },
+    {
+      field: "conversation_rating.replied_at",
+      operator: "<",
+      value: Number(untilTs),
+    },
+  ];
+
+  if (Array.isArray(conversationRatings) && conversationRatings.length > 0) {
+    values.push({
+      field: "conversation_rating.score",
+      operator: "IN",
+      value: conversationRatings,
+    });
+  }
+
   return {
     query: {
       operator: "AND",
-      value: [
-        {
-          field: "conversation_rating.replied_at",
-          operator: ">",
-          value: Number(sinceTs),
-        },
-        {
-          field: "conversation_rating.replied_at",
-          operator: "<",
-          value: Number(untilTs),
-        },
-        {
-          field: "conversation_rating.score",
-          operator: "IN",
-          value: LOW_CSAT_SCORES,
-        },
-      ],
+      value: values,
     },
     sort: {
       field: "conversation_rating.replied_at",
@@ -355,11 +432,13 @@ async function fetchIntercomSearchPage({
   sinceTs,
   untilTs,
   startingAfter,
+  conversationRatings,
 }) {
   const body = buildSearchBody({
     sinceTs,
     untilTs,
     startingAfter,
+    conversationRatings,
   });
 
   const response = await fetch("https://api.intercom.io/conversations/search", {
@@ -437,6 +516,9 @@ async function fetchConversationsForDay({
   limiterEnabled,
   desiredCount,
   seenIds,
+  conversationRatings,
+  cxScoreRatings,
+  selectedIntercomAgentNames,
 }) {
   const { sinceTs, untilTs } = dhakaDayBounds(date);
 
@@ -452,6 +534,7 @@ async function fetchConversationsForDay({
       sinceTs,
       untilTs,
       startingAfter,
+      conversationRatings,
     });
 
     const pageItems = Array.isArray(pageResult?.data?.conversations)
@@ -485,9 +568,21 @@ async function fetchConversationsForDay({
         conversation
       );
 
+      if (!numberMatchesFilter(hydratedPreview?.conversationRating ?? hydratedPreview?.csatScore, conversationRatings)) {
+        continue;
+      }
+
+      if (!numberMatchesFilter(hydratedPreview?.cxScoreRating, cxScoreRatings)) {
+        continue;
+      }
+
+      if (!textMatchesFilter(hydratedPreview?.agentName, selectedIntercomAgentNames)) {
+        continue;
+      }
+
       conversations.push(hydratedPreview);
 
-      if (limiterEnabled && seenIds.size >= desiredCount) {
+      if (limiterEnabled && conversations.length >= desiredCount) {
         return {
           sinceTs,
           untilTs,
@@ -614,6 +709,10 @@ export async function POST(request) {
     const limiterEnabled = Boolean(body?.limiterEnabled);
     const requestedLimit = Number(body?.limitCount);
     const debug = Boolean(body?.debug);
+    const conversationRatings = normalizeNumberSelections(body?.conversationRatings, DEFAULT_CONVERSATION_RATINGS);
+    const cxScoreRatings = normalizeNumberSelections(body?.cxScoreRatings, []);
+    const selectedEmployeeNames = normalizeTextSelections(body?.employeeNames);
+    const selectedIntercomAgentNames = normalizeTextSelections(body?.intercomAgentNames);
 
     if (!startDate || !endDate) {
       return json(
@@ -641,6 +740,9 @@ export async function POST(request) {
         limiterEnabled,
         desiredCount,
         seenIds,
+        conversationRatings,
+        cxScoreRatings,
+        selectedIntercomAgentNames,
       });
 
       fetchedConversations.push(...dayResult.conversations);
@@ -681,6 +783,10 @@ export async function POST(request) {
         limit_count: limiterEnabled ? desiredCount : null,
         fetched_count: limitedConversations.length,
         searched_dates: searchedDates,
+        conversation_ratings: conversationRatings.length ? conversationRatings : "any",
+        cx_score_ratings: cxScoreRatings.length ? cxScoreRatings : "any",
+        selected_employee_names: selectedEmployeeNames,
+        selected_intercom_agent_names: selectedIntercomAgentNames,
         key_source: intercomKey.source,
       },
     });
@@ -699,13 +805,20 @@ export async function POST(request) {
         requestedBy: email,
         searchedDates,
         fetchedCount: limitedConversations.length,
+        filters: {
+          conversationRatings: conversationRatings.length ? conversationRatings : "any",
+          cxScoreRatings: cxScoreRatings.length ? cxScoreRatings : "any",
+          employeeNames: selectedEmployeeNames,
+          intercomAgentNames: selectedIntercomAgentNames,
+        },
       },
       conversations: limitedConversations,
       debug: debug
         ? {
             intercomPerPage: INTERCOM_PER_PAGE,
             maxFetchPagesPerDay: MAX_FETCH_PAGES_PER_DAY,
-            lowCsatScores: LOW_CSAT_SCORES,
+            conversationRatings: conversationRatings.length ? conversationRatings : "any",
+            cxScoreRatings: cxScoreRatings.length ? cxScoreRatings : "any",
             auth: {
               tokenSource: intercomKey.source,
               tokenFingerprint: intercomKey.fingerprint,
