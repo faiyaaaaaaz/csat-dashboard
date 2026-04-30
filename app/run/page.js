@@ -459,11 +459,34 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(Number(value || 0));
 }
 
-function formatClock(value) {
-  if (!value) return "-";
+function normalizeTimestampForDisplay(value) {
+  if (value === null || value === undefined || value === "") return null;
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value > 1000000000000) return new Date(value);
+    if (value > 1000000000) return new Date(value * 1000);
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const numeric = Number(text);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    if (numeric > 1000000000000) return new Date(numeric);
+    if (numeric > 1000000000) return new Date(numeric * 1000);
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatClock(value) {
+  const date = normalizeTimestampForDisplay(value);
+  if (!date) return value ? String(value) : "-";
 
   return date.toLocaleString(undefined, {
     year: "numeric",
@@ -473,7 +496,6 @@ function formatClock(value) {
     minute: "2-digit",
   });
 }
-
 function formatElapsed(startedAt) {
   if (!startedAt) return "0s";
 
@@ -3709,6 +3731,7 @@ const runStyles = `
 
   .control-block {
     padding: 18px;
+    overflow: visible;
   }
 
   .block-head {
@@ -3865,10 +3888,17 @@ const runStyles = `
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+    align-items: stretch;
   }
 
   .behavior-card {
     padding: 16px;
+    min-height: 156px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: visible;
   }
 
   .behavior-card.interactive {
@@ -4638,7 +4668,8 @@ const runStyles = `
 
   .run-multi-filter {
     position: relative;
-    z-index: 12;
+    z-index: 40;
+    isolation: isolate;
   }
 
   .run-multi-filter label {
@@ -4692,16 +4723,16 @@ const runStyles = `
 
   .run-multi-menu {
     position: absolute;
-    z-index: 80;
+    z-index: 9999;
     top: calc(100% + 10px);
     left: 0;
     right: 0;
     min-width: 280px;
     padding: 10px;
     border-radius: 18px;
-    border: 1px solid rgba(96, 165, 250, 0.24);
-    background: rgba(7, 11, 25, 0.98);
-    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
+    border: 1px solid rgba(96, 165, 250, 0.34);
+    background: linear-gradient(180deg, #071126 0%, #050915 100%);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(15, 23, 42, 0.9);
   }
 
   .run-multi-menu input {
@@ -4709,8 +4740,8 @@ const runStyles = `
     min-height: 42px;
     margin-bottom: 8px;
     border-radius: 13px;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(0, 0, 0, 0.34);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    background: #020617;
     color: #ffffff;
     padding: 0 12px;
   }
@@ -4731,8 +4762,8 @@ const runStyles = `
     gap: 10px;
     align-items: center;
     border-radius: 13px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(96, 165, 250, 0.14);
+    background: #0b1326;
     color: #dbe7ff;
     font: inherit;
     text-align: left;
@@ -4764,8 +4795,8 @@ const runStyles = `
 
   .run-multi-option.active,
   .run-multi-option:hover {
-    border-color: rgba(34, 211, 238, 0.24);
-    background: rgba(14, 165, 233, 0.1);
+    border-color: rgba(34, 211, 238, 0.42);
+    background: linear-gradient(135deg, #083044 0%, #0b2144 100%);
   }
 
   .run-multi-empty {
