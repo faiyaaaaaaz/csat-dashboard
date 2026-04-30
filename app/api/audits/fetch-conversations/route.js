@@ -328,6 +328,27 @@ function dhakaDayBounds(dateStr) {
   };
 }
 
+function normalizeIntercomTimestamp(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value > 1000000000000) return new Date(value).toISOString();
+    if (value > 1000000000) return new Date(value * 1000).toISOString();
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const numeric = Number(text);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    if (numeric > 1000000000000) return new Date(numeric).toISOString();
+    if (numeric > 1000000000) return new Date(numeric * 1000).toISOString();
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function firstNonEmpty(...values) {
   for (const value of values) {
     const text = String(value ?? "").trim();
@@ -363,11 +384,12 @@ function extractConversationPreview(conversation) {
 
   return {
     conversationId: String(conversation?.id || "").trim(),
-    repliedAt:
+    repliedAt: normalizeIntercomTimestamp(
       conversation?.conversation_rating?.replied_at ||
-      conversation?.updated_at ||
-      conversation?.created_at ||
-      null,
+        conversation?.updated_at ||
+        conversation?.created_at ||
+        null
+    ),
     csatScore:
       conversation?.conversation_rating?.score ??
       conversation?.conversation_rating?.rating ??
