@@ -93,6 +93,49 @@ function safeMapping(row) {
   };
 }
 
+async function loadActiveSupervisorTeams(adminClient) {
+  const { data: teamsData, error: teamsError } = await adminClient
+    .from("supervisor_teams")
+    .select("id, supervisor_name, supervisor_email, notes, is_active, created_at, updated_at")
+    .eq("is_active", true)
+    .order("supervisor_name", { ascending: true })
+    .limit(1000);
+
+  if (teamsError) {
+    throw new Error(teamsError.message || "Could not load Supervisor Teams.");
+  }
+
+  const teams = Array.isArray(teamsData) ? teamsData : [];
+  const teamIds = teams.map((team) => team.id).filter(Boolean);
+
+  if (!teamIds.length) return [];
+
+  const { data: membersData, error: membersError } = await adminClient
+    .from("supervisor_team_members")
+    .select("id, supervisor_team_id, employee_name, employee_email, intercom_agent_name, team_name, is_active, created_at, updated_at")
+    .in("supervisor_team_id", teamIds)
+    .eq("is_active", true)
+    .order("employee_name", { ascending: true })
+    .limit(10000);
+
+  if (membersError) {
+    throw new Error(membersError.message || "Could not load Supervisor Team members.");
+  }
+
+  const membersByTeam = new Map();
+
+  for (const member of Array.isArray(membersData) ? membersData : []) {
+    const list = membersByTeam.get(member.supervisor_team_id) || [];
+    list.push(member);
+    membersByTeam.set(member.supervisor_team_id, list);
+  }
+
+  return teams.map((team) => ({
+    ...team,
+    members: membersByTeam.get(team.id) || [],
+  }));
+}
+
 function validateMappingPayload(input = {}) {
   const intercomAgentName = normalizeText(input.intercom_agent_name);
   const employeeName = normalizeText(input.employee_name) || intercomAgentName;
@@ -336,22 +379,27 @@ export async function GET(request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const { data, error } = await auth.adminClient
-      .from("agent_mappings")
-      .select("id, intercom_agent_name, employee_name, employee_email, team_name, notes, is_active, created_at, updated_at")
-      .eq("is_active", true)
-      .order("employee_name", { ascending: true })
-      .limit(10000);
+    const [{ data, error }, supervisorTeams] = await Promise.all([
+      auth.adminClient
+        .from("agent_mappings")
+        .select("id, intercom_agent_name, employee_name, employee_email, team_name, notes, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("employee_name", { ascending: true })
+        .limit(10000),
+      loadActiveSupervisorTeams(auth.adminClient),
+    ]);
 
     if (error) throw new Error(error.message || "Could not load agent mappings.");
 
     return json({
       ok: true,
       mappings: Array.isArray(data) ? data : [],
+      supervisorTeams,
       meta: {
         requestedBy: auth.email,
         role: auth.role,
         count: Array.isArray(data) ? data.length : 0,
+        supervisorTeamCount: supervisorTeams.length,
       },
     });
   } catch (error) {
