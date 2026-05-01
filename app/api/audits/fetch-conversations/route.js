@@ -2,10 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const INTERCOM_PER_PAGE = 150;
 const MAX_FETCH_PAGES_PER_DAY = 50;
 const DEFAULT_CONVERSATION_RATINGS = [3, 4, 5];
+const SOFT_TIMEOUT_MS = 45000;
+const MAX_DETAIL_HYDRATIONS_PER_REQUEST = 120;
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -105,6 +108,17 @@ function numberMatchesFilter(value, selectedNumbers) {
   if (!Array.isArray(selectedNumbers) || selectedNumbers.length === 0) return true;
   const number = Number(value);
   return Number.isFinite(number) && selectedNumbers.includes(number);
+}
+
+function hasUsableNumber(value) {
+  if (value === null || value === undefined || value === "") return false;
+  const number = Number(value);
+  return Number.isFinite(number);
+}
+
+function isClearlyUnassignedAgent(value) {
+  const key = normalizeKey(value);
+  return !key || key === "unassigned" || key === "unknown" || key === "-";
 }
 
 function textMatchesFilter(value, selectedValues) {
@@ -541,6 +555,8 @@ async function fetchConversationsForDay({
   conversationRatings,
   cxScoreRatings,
   selectedIntercomAgentNames,
+  requestStartedAt,
+  hydrationCounter,
 }) {
   const { sinceTs, untilTs } = dhakaDayBounds(date);
 
@@ -549,8 +565,16 @@ async function fetchConversationsForDay({
 
   let startingAfter = null;
   let pageCount = 0;
+  let stoppedEarly = false;
+  let stopReason = "";
 
   while (pageCount < MAX_FETCH_PAGES_PER_DAY) {
+    if (Date.now() - requestStartedAt > SOFT_TIMEOUT_MS) {
+      stoppedEarly = true;
+      stopReason = "Stopped early to avoid a Vercel function timeout while scanning Intercom conversations.";
+      break;
+    }
+
     const pageResult = await fetchIntercomSearchPage({
       intercomApiKey,
       sinceTs,
@@ -563,6 +587,9 @@ async function fetchConversationsForDay({
       ? pageResult.data.conversations
       : [];
     const nextCursor = pageResult?.data?.pages?.next?.starting_after ?? null;
+
+    let hydratedOnThisPage = 0;
+    let skippedBeforeHydration = 0;
 
     debugPages.push({
       request: pageResult.requestBody,
@@ -580,41 +607,88 @@ async function fetchConversationsForDay({
     });
 
     for (const conversation of pageItems) {
+      if (Date.now() - requestStartedAt > SOFT_TIMEOUT_MS) {
+        stoppedEarly = true;
+        stopReason = "Stopped early to avoid a Vercel function timeout while filtering CX Score results.";
+        break;
+      }
+
       const id = String(conversation?.id || "").trim();
       if (!id || seenIds.has(id)) continue;
 
+      const preliminaryPreview = extractConversationPreview(conversation);
+
+      if (!numberMatchesFilter(preliminaryPreview?.conversationRating ?? preliminaryPreview?.csatScore, conversationRatings)) {
+        continue;
+      }
+
+      const hasAgentFilter = Array.isArray(selectedIntercomAgentNames) && selectedIntercomAgentNames.length > 0;
+      const hasCxFilter = Array.isArray(cxScoreRatings) && cxScoreRatings.length > 0;
+      const preliminaryAgentKnown = !isClearlyUnassignedAgent(preliminaryPreview?.agentName);
+      const preliminaryAgentMatches = textMatchesFilter(preliminaryPreview?.agentName, selectedIntercomAgentNames);
+
+      if (hasAgentFilter && preliminaryAgentKnown && !preliminaryAgentMatches) {
+        skippedBeforeHydration += 1;
+        continue;
+      }
+
+      let finalPreview = preliminaryPreview;
+      const needsHydrationForAgent = hasAgentFilter && (!preliminaryAgentKnown || !preliminaryAgentMatches);
+      const needsHydrationForCx = hasCxFilter && !hasUsableNumber(preliminaryPreview?.cxScoreRating);
+
+      if (needsHydrationForAgent || needsHydrationForCx) {
+        if (hydrationCounter.count >= MAX_DETAIL_HYDRATIONS_PER_REQUEST) {
+          stoppedEarly = true;
+          stopReason = `Stopped after checking ${MAX_DETAIL_HYDRATIONS_PER_REQUEST} detailed Intercom conversations. Narrow the date range, employee, or rating filters and try again.`;
+          break;
+        }
+
+        hydrationCounter.count += 1;
+        hydratedOnThisPage += 1;
+        finalPreview = await hydrateConversationPreview(intercomApiKey, conversation);
+      }
+
+      if (!numberMatchesFilter(finalPreview?.conversationRating ?? finalPreview?.csatScore, conversationRatings)) {
+        continue;
+      }
+
+      if (!numberMatchesFilter(finalPreview?.cxScoreRating, cxScoreRatings)) {
+        continue;
+      }
+
+      if (!textMatchesFilter(finalPreview?.agentName, selectedIntercomAgentNames)) {
+        continue;
+      }
+
       seenIds.add(id);
-
-      const hydratedPreview = await hydrateConversationPreview(
-        intercomApiKey,
-        conversation
-      );
-
-      if (!numberMatchesFilter(hydratedPreview?.conversationRating ?? hydratedPreview?.csatScore, conversationRatings)) {
-        continue;
-      }
-
-      if (!numberMatchesFilter(hydratedPreview?.cxScoreRating, cxScoreRatings)) {
-        continue;
-      }
-
-      if (!textMatchesFilter(hydratedPreview?.agentName, selectedIntercomAgentNames)) {
-        continue;
-      }
-
-      conversations.push(hydratedPreview);
+      conversations.push(finalPreview);
 
       if (limiterEnabled && conversations.length >= desiredCount) {
+        const lastDebug = debugPages[debugPages.length - 1];
+        if (lastDebug) {
+          lastDebug.hydratedOnThisPage = hydratedOnThisPage;
+          lastDebug.skippedBeforeHydration = skippedBeforeHydration;
+        }
+
         return {
           sinceTs,
           untilTs,
           conversations,
           debugPages,
+          stoppedEarly,
+          stopReason,
+          hydrationCount: hydrationCounter.count,
         };
       }
     }
 
-    if (!nextCursor) {
+    const lastDebug = debugPages[debugPages.length - 1];
+    if (lastDebug) {
+      lastDebug.hydratedOnThisPage = hydratedOnThisPage;
+      lastDebug.skippedBeforeHydration = skippedBeforeHydration;
+    }
+
+    if (stoppedEarly || !nextCursor) {
       break;
     }
 
@@ -627,6 +701,9 @@ async function fetchConversationsForDay({
     untilTs,
     conversations,
     debugPages,
+    stoppedEarly,
+    stopReason,
+    hydrationCount: hydrationCounter.count,
   };
 }
 
@@ -754,6 +831,10 @@ export async function POST(request) {
     const seenIds = new Set();
     const fetchedConversations = [];
     const dailySummary = [];
+    const requestStartedAt = Date.now();
+    const hydrationCounter = { count: 0 };
+    let stoppedEarly = false;
+    let stopReason = "";
 
     for (const date of searchedDates) {
       const dayResult = await fetchConversationsForDay({
@@ -765,6 +846,8 @@ export async function POST(request) {
         conversationRatings,
         cxScoreRatings,
         selectedIntercomAgentNames,
+        requestStartedAt,
+        hydrationCounter,
       });
 
       fetchedConversations.push(...dayResult.conversations);
@@ -775,7 +858,16 @@ export async function POST(request) {
         untilTs: dayResult.untilTs,
         fetchedCount: dayResult.conversations.length,
         pages: debug ? dayResult.debugPages : undefined,
+        stoppedEarly: dayResult.stoppedEarly || false,
+        stopReason: dayResult.stopReason || "",
+        hydrationCount: dayResult.hydrationCount || hydrationCounter.count,
       });
+
+      if (dayResult.stoppedEarly) {
+        stoppedEarly = true;
+        stopReason = dayResult.stopReason || "Stopped early to avoid timeout.";
+        break;
+      }
 
       if (limiterEnabled && fetchedConversations.length >= desiredCount) {
         break;
@@ -797,7 +889,9 @@ export async function POST(request) {
       target_type: "Intercom Conversations",
       target_label: `${startDate} to ${endDate}`,
       status: "success",
-      description: `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate}.`,
+      description: stoppedEarly
+        ? `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate} before the safe timeout limit.`
+        : `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate}.`,
       safe_after: {
         start_date: startDate,
         end_date: endDate,
@@ -809,16 +903,21 @@ export async function POST(request) {
         cx_score_ratings: cxScoreRatings.length ? cxScoreRatings : "any",
         selected_employee_names: selectedEmployeeNames,
         selected_intercom_agent_names: selectedIntercomAgentNames,
+        hydration_count: hydrationCounter.count,
+        stopped_early: stoppedEarly,
+        stop_reason: stopReason,
         key_source: intercomKey.source,
       },
     });
 
     return json({
       ok: true,
-      message:
-        limitedConversations.length > 0
+      message: stoppedEarly
+        ? `${limitedConversations.length} conversation(s) matched before the safe timeout limit. Narrow the filters if you expected more.`
+        : limitedConversations.length > 0
           ? "Conversations fetched successfully."
           : "No conversations found for the selected date range.",
+      warning: stoppedEarly ? stopReason : "",
       meta: {
         startDate,
         endDate,
@@ -827,6 +926,9 @@ export async function POST(request) {
         requestedBy: email,
         searchedDates,
         fetchedCount: limitedConversations.length,
+        hydrationCount: hydrationCounter.count,
+        stoppedEarly,
+        stopReason,
         filters: {
           conversationRatings: conversationRatings.length ? conversationRatings : "any",
           cxScoreRatings: cxScoreRatings.length ? cxScoreRatings : "any",
@@ -846,6 +948,9 @@ export async function POST(request) {
               tokenFingerprint: intercomKey.fingerprint,
             },
             dailySummary,
+            hydrationCount: hydrationCounter.count,
+            stoppedEarly,
+            stopReason,
           }
         : undefined,
     });
