@@ -319,16 +319,45 @@ async function intercomGet({ intercomApiKey, path }) {
 
 async function loadIntercomAdmins(intercomApiKey) {
   try {
-    const data = await intercomGet({ intercomApiKey, path: "/admins" });
-    const admins = Array.isArray(data?.admins) ? data.admins : Array.isArray(data?.data) ? data.data : [];
+    const allAdmins = [];
+    let startingAfter = "";
+    let safety = 0;
 
-    return admins
-      .map((admin) => ({
-        id: String(admin?.id || "").trim(),
-        name: normalizeText(admin?.name),
-        email: normalizeEmail(admin?.email),
-      }))
-      .filter((admin) => admin.id && (admin.name || admin.email));
+    while (safety < 25) {
+      safety += 1;
+
+      const query = new URLSearchParams();
+      query.set("per_page", "150");
+      if (startingAfter) query.set("starting_after", startingAfter);
+
+      const data = await intercomGet({ intercomApiKey, path: `/admins?${query.toString()}` });
+      const admins = Array.isArray(data?.admins) ? data.admins : Array.isArray(data?.data) ? data.data : [];
+
+      allAdmins.push(...admins);
+
+      const nextCursor =
+        data?.pages?.next?.starting_after ||
+        data?.pages?.next?.startingAfter ||
+        data?.pagination?.next?.starting_after ||
+        data?.pagination?.next?.startingAfter ||
+        "";
+
+      if (!nextCursor || !admins.length) break;
+      startingAfter = String(nextCursor);
+    }
+
+    const byId = new Map();
+
+    for (const admin of allAdmins) {
+      const id = String(admin?.id || "").trim();
+      const name = normalizeText(admin?.name);
+      const email = normalizeEmail(admin?.email);
+
+      if (!id || (!name && !email)) continue;
+      if (!byId.has(id)) byId.set(id, { id, name, email });
+    }
+
+    return Array.from(byId.values());
   } catch (error) {
     console.warn("[intercom] Could not load admins for assignee filtering", error);
     return [];
@@ -697,6 +726,10 @@ export async function POST(request) {
     const adminLookup = buildAdminLookup(admins);
     const selectedAdminResolution = resolveSelectedAdminIds(selectedIntercomAgentNames, adminLookup);
 
+    const hasSelectedAgentFilter = selectedIntercomAgentNames.length > 0;
+    const hasUnresolvedAgentNames = selectedAdminResolution.unresolved.length > 0;
+    const useAdminAssigneeSearch = hasSelectedAgentFilter && !hasUnresolvedAgentNames && selectedAdminResolution.ids.length > 0;
+
     const chunk = await fetchChunk({
       intercomApiKey: intercomKey.value,
       startDate,
@@ -706,8 +739,8 @@ export async function POST(request) {
       limiterEnabled,
       desiredCount,
       conversationRatings,
-      selectedAdminAssigneeIds: selectedAdminResolution.ids,
-      unresolvedSelectedAgentNames: selectedAdminResolution.unresolved,
+      selectedAdminAssigneeIds: useAdminAssigneeSearch ? selectedAdminResolution.ids : [],
+      unresolvedSelectedAgentNames: hasSelectedAgentFilter && !useAdminAssigneeSearch ? selectedIntercomAgentNames : [],
       adminLookup,
     });
 
@@ -733,6 +766,8 @@ export async function POST(request) {
           intercomAgentNames: selectedIntercomAgentNames,
           adminAssigneeIds: selectedAdminResolution.ids,
           unresolvedAgentNames: selectedAdminResolution.unresolved,
+          agentFilterMode: useAdminAssigneeSearch ? "admin_assignee_id" : hasSelectedAgentFilter ? "agent_name_fallback" : "none",
+          loadedIntercomAdminCount: admins.length,
         },
         auth: {
           tokenSource: intercomKey.source,
