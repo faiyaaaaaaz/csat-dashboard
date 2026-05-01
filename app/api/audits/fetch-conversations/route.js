@@ -7,21 +7,13 @@ export const maxDuration = 60;
 const INTERCOM_PER_PAGE = 150;
 const MAX_FETCH_PAGES_PER_DAY = 50;
 const DEFAULT_CONVERSATION_RATINGS = [3, 4, 5];
-const SOFT_TIMEOUT_MS = 45000;
-const MAX_DETAIL_HYDRATIONS_PER_REQUEST = 160;
-const CX_SCORE_SEARCH_FIELDS = [
-  "custom_attributes.CX Score rating",
-  "custom_attributes.CX Score Rating",
-  "custom_attributes.CX Score",
-  "custom_attributes.cx_score_rating",
-  "custom_attributes.cx_score",
-];
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     status: init.status || 200,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
       ...(init.headers || {}),
     },
   });
@@ -73,7 +65,7 @@ async function loadActiveApiKey({ adminClient, keyType, envName, displayName }) 
   }
 
   throw new Error(
-    `No active ${displayName} API key found. Save it in Admin → API key vault first.`
+    `No active ${displayName} API key found. Save it in Admin -> API key vault first.`
   );
 }
 
@@ -117,17 +109,6 @@ function numberMatchesFilter(value, selectedNumbers) {
   return Number.isFinite(number) && selectedNumbers.includes(number);
 }
 
-function hasUsableNumber(value) {
-  if (value === null || value === undefined || value === "") return false;
-  const number = Number(value);
-  return Number.isFinite(number);
-}
-
-function isClearlyUnassignedAgent(value) {
-  const key = normalizeKey(value);
-  return !key || key === "unassigned" || key === "unknown" || key === "-";
-}
-
 function textMatchesFilter(value, selectedValues) {
   if (!Array.isArray(selectedValues) || selectedValues.length === 0) return true;
   const key = normalizeKey(value);
@@ -136,30 +117,17 @@ function textMatchesFilter(value, selectedValues) {
   return selected.has(key);
 }
 
-function firstScoreValue(...values) {
+function firstNonEmpty(...values) {
   for (const value of values) {
     const text = String(value ?? "").trim();
-    if (!text) continue;
-    const number = Number(text);
-    if (Number.isFinite(number)) return number;
+    if (text) return text;
   }
   return "";
 }
 
-function getCxScoreFromConversation(conversation) {
-  const custom = conversation?.custom_attributes || {};
-  return firstScoreValue(
-    custom?.cx_score_rating,
-    custom?.cx_score,
-    custom?.CXScoreRating,
-    custom?.CXScore,
-    custom?.["CX Score Rating"],
-    custom?.["CX Score"],
-    custom?.customer_experience_score,
-    custom?.quality_score,
-    conversation?.cx_score_rating,
-    conversation?.cx_score
-  );
+function isClearlyUnassignedAgent(value) {
+  const key = normalizeKey(value);
+  return !key || key === "unassigned" || key === "unknown" || key === "-";
 }
 
 function getRequestMeta(request) {
@@ -192,6 +160,23 @@ async function readActiveRoleGrant(adminClient, email) {
   }
 
   return data || null;
+}
+
+function buildFallbackProfile(user) {
+  const email = normalizeEmail(user?.email);
+
+  if (email === "faiyaz@nextventures.io") {
+    return {
+      id: user.id,
+      email,
+      full_name: user.user_metadata?.full_name || "Faiyaz Muhtasim Ahmed",
+      role: "master_admin",
+      can_run_tests: true,
+      is_active: true,
+    };
+  }
+
+  return null;
 }
 
 function resolveEffectiveProfile({ user, email, profileData, grant }) {
@@ -230,6 +215,16 @@ function resolveEffectiveProfile({ user, email, profileData, grant }) {
   return baseProfile;
 }
 
+function canRunAudits(profile) {
+  return Boolean(
+    profile?.is_active === true &&
+      (profile?.role === "master_admin" ||
+        profile?.role === "admin" ||
+        profile?.role === "audit_runner" ||
+        profile?.can_run_tests === true)
+  );
+}
+
 async function writeActivityLog(adminClient, request, payload) {
   try {
     const meta = getRequestMeta(request);
@@ -259,33 +254,6 @@ async function writeActivityLog(adminClient, request, payload) {
   } catch (error) {
     console.warn("[activity-log] audit fetch log failed", error);
   }
-}
-
-function buildFallbackProfile(user) {
-  const email = String(user?.email || "").toLowerCase();
-
-  if (email === "faiyaz@nextventures.io") {
-    return {
-      id: user.id,
-      email,
-      full_name: user.user_metadata?.full_name || "Faiyaz Muhtasim Ahmed",
-      role: "master_admin",
-      can_run_tests: true,
-      is_active: true,
-    };
-  }
-
-  return null;
-}
-
-function canRunAudits(profile) {
-  return Boolean(
-    profile?.is_active === true &&
-      (profile?.role === "master_admin" ||
-        profile?.role === "admin" ||
-        profile?.role === "audit_runner" ||
-        profile?.can_run_tests === true)
-  );
 }
 
 function parseDateInput(dateStr) {
@@ -370,38 +338,126 @@ function normalizeIntercomTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function firstNonEmpty(...values) {
-  for (const value of values) {
-    const text = String(value ?? "").trim();
-    if (text) return text;
+async function intercomGet({ intercomApiKey, path }) {
+  const response = await fetch(`https://api.intercom.io${path}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "Intercom-Version": "2.12",
+      Authorization: `Bearer ${intercomApiKey}`,
+    },
+    cache: "no-store",
+  });
+
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
   }
-  return "";
+
+  if (!response.ok) {
+    throw new Error(`Intercom GET ${path} failed with status ${response.status}: ${text.slice(0, 800)}`);
+  }
+
+  return data;
 }
 
-function extractConversationPreview(conversation) {
+async function loadIntercomAdmins(intercomApiKey) {
+  try {
+    const data = await intercomGet({ intercomApiKey, path: "/admins" });
+    const admins = Array.isArray(data?.admins)
+      ? data.admins
+      : Array.isArray(data?.data)
+      ? data.data
+      : [];
+
+    return admins
+      .map((admin) => ({
+        id: String(admin?.id || "").trim(),
+        name: normalizeText(admin?.name),
+        email: normalizeEmail(admin?.email),
+      }))
+      .filter((admin) => admin.id && (admin.name || admin.email));
+  } catch (error) {
+    console.warn("[intercom] Could not load admins for assignee filtering", error);
+    return [];
+  }
+}
+
+function buildAdminLookup(admins) {
+  const byId = new Map();
+  const byName = new Map();
+  const byEmail = new Map();
+
+  for (const admin of admins || []) {
+    if (admin.id) byId.set(String(admin.id), admin);
+    if (admin.name) byName.set(normalizeKey(admin.name), admin);
+    if (admin.email) byEmail.set(normalizeEmail(admin.email), admin);
+  }
+
+  return { byId, byName, byEmail };
+}
+
+function resolveSelectedAdminIds(selectedIntercomAgentNames, adminLookup) {
+  const selected = normalizeTextSelections(selectedIntercomAgentNames);
+  const ids = [];
+  const unresolved = [];
+
+  for (const value of selected) {
+    const key = normalizeKey(value);
+    const emailKey = normalizeEmail(value);
+    const match = adminLookup.byName.get(key) || adminLookup.byEmail.get(emailKey) || adminLookup.byId.get(value);
+
+    if (match?.id && !ids.includes(Number(match.id))) {
+      const numberId = Number(match.id);
+      ids.push(Number.isFinite(numberId) ? numberId : match.id);
+    } else {
+      unresolved.push(value);
+    }
+  }
+
+  return { ids, unresolved };
+}
+
+function getAgentNameFromConversation(conversation, adminLookup) {
+  const adminId = firstNonEmpty(conversation?.admin_assignee_id, conversation?.assignee?.id);
+  const adminFromId = adminId ? adminLookup?.byId?.get(String(adminId)) : null;
+
+  if (adminFromId?.name) return adminFromId.name;
+
   const parts = Array.isArray(conversation?.conversation_parts?.conversation_parts)
     ? conversation.conversation_parts.conversation_parts
     : [];
 
-  let agentName = firstNonEmpty(
+  const directName = firstNonEmpty(
     conversation?.assignee?.name,
     conversation?.admin_assignee?.name,
     conversation?.teammate_assignee?.name,
     conversation?.conversation_rating?.teammate?.name
   );
 
-  if (!agentName && parts.length) {
+  if (directName) return directName;
+
+  if (parts.length) {
     const adminParts = parts
-      .filter((part) =>
-        ["admin", "teammate", "team_member"].includes(part?.author?.type)
-      )
+      .filter((part) => ["admin", "teammate", "team_member"].includes(part?.author?.type))
       .sort((a, b) => (b?.created_at || 0) - (a?.created_at || 0));
 
-    agentName = firstNonEmpty(
-      adminParts?.[0]?.author?.name,
-      adminParts?.[0]?.author?.email
-    );
+    return firstNonEmpty(adminParts?.[0]?.author?.name, adminParts?.[0]?.author?.email);
   }
+
+  return "Unassigned";
+}
+
+function extractConversationPreview(conversation, adminLookup) {
+  const conversationRating =
+    conversation?.conversation_rating?.score ??
+    conversation?.conversation_rating?.rating ??
+    conversation?.conversation_rating?.value ??
+    "";
 
   return {
     conversationId: String(conversation?.id || "").trim(),
@@ -411,17 +467,8 @@ function extractConversationPreview(conversation) {
         conversation?.created_at ||
         null
     ),
-    csatScore:
-      conversation?.conversation_rating?.score ??
-      conversation?.conversation_rating?.rating ??
-      conversation?.conversation_rating?.value ??
-      "",
-    conversationRating:
-      conversation?.conversation_rating?.score ??
-      conversation?.conversation_rating?.rating ??
-      conversation?.conversation_rating?.value ??
-      "",
-    cxScoreRating: getCxScoreFromConversation(conversation),
+    csatScore: conversationRating,
+    conversationRating,
     clientEmail: firstNonEmpty(
       conversation?.contacts?.contacts?.[0]?.email,
       conversation?.source?.author?.email,
@@ -429,7 +476,7 @@ function extractConversationPreview(conversation) {
       conversation?.user?.email,
       conversation?.customer?.email
     ),
-    agentName: agentName || "Unassigned",
+    agentName: getAgentNameFromConversation(conversation, adminLookup),
   };
 }
 
@@ -438,8 +485,7 @@ function buildSearchBody({
   untilTs,
   startingAfter,
   conversationRatings,
-  cxScoreRatings,
-  cxScoreSearchField,
+  selectedAdminAssigneeIds,
 }) {
   const values = [
     {
@@ -462,11 +508,11 @@ function buildSearchBody({
     });
   }
 
-  if (cxScoreSearchField && Array.isArray(cxScoreRatings) && cxScoreRatings.length > 0) {
+  if (Array.isArray(selectedAdminAssigneeIds) && selectedAdminAssigneeIds.length > 0) {
     values.push({
-      field: cxScoreSearchField,
+      field: "admin_assignee_id",
       operator: "IN",
-      value: cxScoreRatings,
+      value: selectedAdminAssigneeIds,
     });
   }
 
@@ -518,156 +564,23 @@ async function postIntercomSearch({ intercomApiKey, body }) {
   };
 }
 
-function looksLikeInvalidSearchField(pageResult) {
-  const text = String(pageResult?.responseExcerpt || "").toLowerCase();
-  return (
-    pageResult?.status === 400 &&
-    (text.includes("field") || text.includes("attribute") || text.includes("invalid") || text.includes("unknown"))
-  );
-}
-
-async function fetchIntercomSearchPage({
-  intercomApiKey,
-  sinceTs,
-  untilTs,
-  startingAfter,
-  conversationRatings,
-  cxScoreRatings,
-  cxScoreSearchState,
-}) {
-  const hasCxFilter = Array.isArray(cxScoreRatings) && cxScoreRatings.length > 0;
-
-  if (!hasCxFilter) {
-    const body = buildSearchBody({
-      sinceTs,
-      untilTs,
-      startingAfter,
-      conversationRatings,
-      cxScoreRatings: [],
-      cxScoreSearchField: "",
-    });
-
-    return postIntercomSearch({ intercomApiKey, body });
-  }
-
-  if (cxScoreSearchState?.field) {
-    const body = buildSearchBody({
-      sinceTs,
-      untilTs,
-      startingAfter,
-      conversationRatings,
-      cxScoreRatings,
-      cxScoreSearchField: cxScoreSearchState.field,
-    });
-
-    const result = await postIntercomSearch({ intercomApiKey, body });
-    return { ...result, cxScoreSearchField: cxScoreSearchState.field, cxScoreSearchFallback: false };
-  }
-
-  if (cxScoreSearchState?.unsupported === true) {
-    const body = buildSearchBody({
-      sinceTs,
-      untilTs,
-      startingAfter,
-      conversationRatings,
-      cxScoreRatings: [],
-      cxScoreSearchField: "",
-    });
-
-    const result = await postIntercomSearch({ intercomApiKey, body });
-    return { ...result, cxScoreSearchField: "detail_hydration_fallback", cxScoreSearchFallback: true };
-  }
-
-  const failedCandidates = [];
-
-  for (const field of CX_SCORE_SEARCH_FIELDS) {
-    const body = buildSearchBody({
-      sinceTs,
-      untilTs,
-      startingAfter,
-      conversationRatings,
-      cxScoreRatings,
-      cxScoreSearchField: field,
-    });
-
-    const result = await postIntercomSearch({ intercomApiKey, body });
-
-    if (result.ok) {
-      if (cxScoreSearchState) cxScoreSearchState.field = field;
-      return {
-        ...result,
-        cxScoreSearchField: field,
-        cxScoreSearchFallback: false,
-        failedCxScoreFieldCandidates: failedCandidates,
-      };
-    }
-
-    failedCandidates.push({ field, status: result.status, responseExcerpt: result.responseExcerpt });
-
-    if (!looksLikeInvalidSearchField(result)) {
-      return {
-        ...result,
-        cxScoreSearchField: field,
-        cxScoreSearchFallback: false,
-        failedCxScoreFieldCandidates: failedCandidates,
-      };
-    }
-  }
-
-  if (cxScoreSearchState) cxScoreSearchState.unsupported = true;
-
-  const fallbackBody = buildSearchBody({
-    sinceTs,
-    untilTs,
-    startingAfter,
-    conversationRatings,
-    cxScoreRatings: [],
-    cxScoreSearchField: "",
-  });
-
-  const fallbackResult = await postIntercomSearch({ intercomApiKey, body: fallbackBody });
-  return {
-    ...fallbackResult,
-    cxScoreSearchField: "detail_hydration_fallback",
-    cxScoreSearchFallback: true,
-    failedCxScoreFieldCandidates: failedCandidates,
-  };
-}
-
 async function fetchFullConversation(intercomApiKey, conversationId) {
-  const response = await fetch(`https://api.intercom.io/conversations/${conversationId}`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "Intercom-Version": "2.12",
-      Authorization: `Bearer ${intercomApiKey}`,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Intercom conversation fetch failed for ${conversationId}: ${response.status} ${text}`
-    );
-  }
-
-  return response.json();
+  const data = await intercomGet({ intercomApiKey, path: `/conversations/${conversationId}` });
+  return data;
 }
 
-async function hydrateConversationPreview(intercomApiKey, searchConversation) {
+async function hydrateConversationPreview(intercomApiKey, searchConversation, adminLookup) {
   const conversationId = String(searchConversation?.id || "").trim();
 
   if (!conversationId) {
-    return extractConversationPreview(searchConversation);
+    return extractConversationPreview(searchConversation, adminLookup);
   }
 
   try {
     const fullConversation = await fetchFullConversation(intercomApiKey, conversationId);
-    return extractConversationPreview(fullConversation);
+    return extractConversationPreview(fullConversation, adminLookup);
   } catch {
-    return extractConversationPreview(searchConversation);
+    return extractConversationPreview(searchConversation, adminLookup);
   }
 }
 
@@ -678,11 +591,10 @@ async function fetchConversationsForDay({
   desiredCount,
   seenIds,
   conversationRatings,
-  cxScoreRatings,
   selectedIntercomAgentNames,
-  requestStartedAt,
-  hydrationCounter,
-  cxScoreSearchState,
+  selectedAdminAssigneeIds,
+  unresolvedSelectedAgentNames,
+  adminLookup,
 }) {
   const { sinceTs, untilTs } = dhakaDayBounds(date);
 
@@ -691,36 +603,25 @@ async function fetchConversationsForDay({
 
   let startingAfter = null;
   let pageCount = 0;
-  let stoppedEarly = false;
-  let stopReason = "";
+
+  const hasNameFallbackFilter =
+    Array.isArray(unresolvedSelectedAgentNames) && unresolvedSelectedAgentNames.length > 0;
 
   while (pageCount < MAX_FETCH_PAGES_PER_DAY) {
-    if (Date.now() - requestStartedAt > SOFT_TIMEOUT_MS) {
-      stoppedEarly = true;
-      stopReason = "Stopped early to avoid a Vercel function timeout while scanning Intercom conversations.";
-      break;
-    }
-
-    const pageResult = await fetchIntercomSearchPage({
-      intercomApiKey,
+    const searchBody = buildSearchBody({
       sinceTs,
       untilTs,
       startingAfter,
       conversationRatings,
-      cxScoreRatings,
-      cxScoreSearchState,
+      selectedAdminAssigneeIds,
     });
+
+    const pageResult = await postIntercomSearch({ intercomApiKey, body: searchBody });
 
     const pageItems = Array.isArray(pageResult?.data?.conversations)
       ? pageResult.data.conversations
       : [];
     const nextCursor = pageResult?.data?.pages?.next?.starting_after ?? null;
-    const cxScoreFilteredByIntercom = Boolean(
-      cxScoreRatings?.length && pageResult?.cxScoreSearchField && !pageResult?.cxScoreSearchFallback
-    );
-
-    let hydratedOnThisPage = 0;
-    let skippedBeforeHydration = 0;
 
     debugPages.push({
       request: pageResult.requestBody,
@@ -729,111 +630,56 @@ async function fetchConversationsForDay({
       ok: pageResult.ok,
       contentType: pageResult.contentType,
       returnedCount: pageItems.length,
+      totalCount: pageResult?.data?.total_count ?? null,
       nextCursor,
       sampleIds: pageItems
         .map((item) => String(item?.id || "").trim())
         .filter(Boolean)
         .slice(0, 10),
       responseExcerpt: pageResult.responseExcerpt,
-      cxScoreSearchField: pageResult.cxScoreSearchField || cxScoreSearchState?.field || "",
-      cxScoreSearchFallback: Boolean(pageResult.cxScoreSearchFallback),
-      failedCxScoreFieldCandidates: pageResult.failedCxScoreFieldCandidates || undefined,
     });
 
     if (!pageResult.ok) {
-      stoppedEarly = true;
-      stopReason = `Intercom search failed with status ${pageResult.status}.`;
-      break;
+      throw new Error(`Intercom search failed with status ${pageResult.status}: ${pageResult.responseExcerpt}`);
     }
 
     for (const conversation of pageItems) {
-      if (Date.now() - requestStartedAt > SOFT_TIMEOUT_MS) {
-        stoppedEarly = true;
-        stopReason = "Stopped early to avoid a Vercel function timeout while filtering Intercom conversations.";
-        break;
-      }
-
       const id = String(conversation?.id || "").trim();
       if (!id || seenIds.has(id)) continue;
 
-      const preliminaryPreview = extractConversationPreview(conversation);
+      let preview = extractConversationPreview(conversation, adminLookup);
 
-      if (!numberMatchesFilter(preliminaryPreview?.conversationRating ?? preliminaryPreview?.csatScore, conversationRatings)) {
+      if (!numberMatchesFilter(preview?.conversationRating ?? preview?.csatScore, conversationRatings)) {
         continue;
       }
 
-      const hasAgentFilter = Array.isArray(selectedIntercomAgentNames) && selectedIntercomAgentNames.length > 0;
-      const hasCxFilter = Array.isArray(cxScoreRatings) && cxScoreRatings.length > 0;
-      const preliminaryAgentKnown = !isClearlyUnassignedAgent(preliminaryPreview?.agentName);
-      const preliminaryAgentMatches = textMatchesFilter(preliminaryPreview?.agentName, selectedIntercomAgentNames);
+      if (hasNameFallbackFilter) {
+        const knownAgent = !isClearlyUnassignedAgent(preview?.agentName);
+        const matchesKnownName = textMatchesFilter(preview?.agentName, unresolvedSelectedAgentNames);
 
-      if (hasAgentFilter && preliminaryAgentKnown && !preliminaryAgentMatches) {
-        skippedBeforeHydration += 1;
-        continue;
-      }
-
-      let finalPreview = preliminaryPreview;
-      const needsHydrationForAgent = hasAgentFilter && (!preliminaryAgentKnown || !preliminaryAgentMatches);
-      const needsHydrationForCx = hasCxFilter && !cxScoreFilteredByIntercom && !hasUsableNumber(preliminaryPreview?.cxScoreRating);
-
-      if (needsHydrationForAgent || needsHydrationForCx) {
-        if (hydrationCounter.count >= MAX_DETAIL_HYDRATIONS_PER_REQUEST) {
-          stoppedEarly = true;
-          stopReason = `Stopped after checking ${MAX_DETAIL_HYDRATIONS_PER_REQUEST} detailed Intercom conversations. Narrow the date range, employee, or rating filters and try again.`;
-          break;
+        if (!knownAgent || !matchesKnownName) {
+          preview = await hydrateConversationPreview(intercomApiKey, conversation, adminLookup);
         }
 
-        hydrationCounter.count += 1;
-        hydratedOnThisPage += 1;
-        finalPreview = await hydrateConversationPreview(intercomApiKey, conversation);
-      }
-
-      if (!numberMatchesFilter(finalPreview?.conversationRating ?? finalPreview?.csatScore, conversationRatings)) {
-        continue;
-      }
-
-      if (hasCxFilter && !cxScoreFilteredByIntercom && !numberMatchesFilter(finalPreview?.cxScoreRating, cxScoreRatings)) {
-        continue;
-      }
-
-      if (!textMatchesFilter(finalPreview?.agentName, selectedIntercomAgentNames)) {
-        continue;
+        if (!textMatchesFilter(preview?.agentName, unresolvedSelectedAgentNames)) {
+          continue;
+        }
       }
 
       seenIds.add(id);
-      conversations.push({
-        ...finalPreview,
-        cxScoreRating: finalPreview?.cxScoreRating || (cxScoreFilteredByIntercom ? cxScoreRatings.join(", ") : ""),
-      });
+      conversations.push(preview);
 
       if (limiterEnabled && conversations.length >= desiredCount) {
-        const lastDebug = debugPages[debugPages.length - 1];
-        if (lastDebug) {
-          lastDebug.hydratedOnThisPage = hydratedOnThisPage;
-          lastDebug.skippedBeforeHydration = skippedBeforeHydration;
-        }
-
         return {
           sinceTs,
           untilTs,
           conversations,
           debugPages,
-          stoppedEarly,
-          stopReason,
-          hydrationCount: hydrationCounter.count,
-          cxScoreSearchField: cxScoreSearchState?.field || "",
-          cxScoreSearchFallback: Boolean(cxScoreSearchState?.unsupported),
         };
       }
     }
 
-    const lastDebug = debugPages[debugPages.length - 1];
-    if (lastDebug) {
-      lastDebug.hydratedOnThisPage = hydratedOnThisPage;
-      lastDebug.skippedBeforeHydration = skippedBeforeHydration;
-    }
-
-    if (stoppedEarly || !nextCursor) {
+    if (!nextCursor) {
       break;
     }
 
@@ -846,11 +692,6 @@ async function fetchConversationsForDay({
     untilTs,
     conversations,
     debugPages,
-    stoppedEarly,
-    stopReason,
-    hydrationCount: hydrationCounter.count,
-    cxScoreSearchField: cxScoreSearchState?.field || "",
-    cxScoreSearchFallback: Boolean(cxScoreSearchState?.unsupported),
   };
 }
 
@@ -956,7 +797,6 @@ export async function POST(request) {
     const requestedLimit = Number(body?.limitCount);
     const debug = Boolean(body?.debug);
     const conversationRatings = normalizeNumberSelections(body?.conversationRatings, DEFAULT_CONVERSATION_RATINGS);
-    const cxScoreRatings = normalizeNumberSelections(body?.cxScoreRatings, []);
     const selectedEmployeeNames = normalizeTextSelections(body?.employeeNames);
     const selectedIntercomAgentNames = normalizeTextSelections(body?.intercomAgentNames);
 
@@ -970,6 +810,12 @@ export async function POST(request) {
       );
     }
 
+    const admins = await loadIntercomAdmins(intercomApiKey);
+    const adminLookup = buildAdminLookup(admins);
+    const selectedAdminResolution = resolveSelectedAdminIds(selectedIntercomAgentNames, adminLookup);
+    const selectedAdminAssigneeIds = selectedAdminResolution.ids;
+    const unresolvedSelectedAgentNames = selectedAdminResolution.unresolved;
+
     const searchedDates = enumerateDateRange(startDate, endDate);
     const desiredCount = limiterEnabled
       ? Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 5, 200))
@@ -978,11 +824,6 @@ export async function POST(request) {
     const seenIds = new Set();
     const fetchedConversations = [];
     const dailySummary = [];
-    const requestStartedAt = Date.now();
-    const hydrationCounter = { count: 0 };
-    const cxScoreSearchState = { field: "", unsupported: false };
-    let stoppedEarly = false;
-    let stopReason = "";
 
     for (const date of searchedDates) {
       const dayResult = await fetchConversationsForDay({
@@ -992,11 +833,10 @@ export async function POST(request) {
         desiredCount,
         seenIds,
         conversationRatings,
-        cxScoreRatings,
         selectedIntercomAgentNames,
-        requestStartedAt,
-        hydrationCounter,
-        cxScoreSearchState,
+        selectedAdminAssigneeIds,
+        unresolvedSelectedAgentNames,
+        adminLookup,
       });
 
       fetchedConversations.push(...dayResult.conversations);
@@ -1007,18 +847,7 @@ export async function POST(request) {
         untilTs: dayResult.untilTs,
         fetchedCount: dayResult.conversations.length,
         pages: debug ? dayResult.debugPages : undefined,
-        stoppedEarly: dayResult.stoppedEarly || false,
-        stopReason: dayResult.stopReason || "",
-        hydrationCount: dayResult.hydrationCount || hydrationCounter.count,
-        cxScoreSearchField: dayResult.cxScoreSearchField || cxScoreSearchState.field || "",
-        cxScoreSearchFallback: dayResult.cxScoreSearchFallback || false,
       });
-
-      if (dayResult.stoppedEarly) {
-        stoppedEarly = true;
-        stopReason = dayResult.stopReason || "Stopped early to avoid timeout.";
-        break;
-      }
 
       if (limiterEnabled && fetchedConversations.length >= desiredCount) {
         break;
@@ -1040,9 +869,7 @@ export async function POST(request) {
       target_type: "Intercom Conversations",
       target_label: `${startDate} to ${endDate}`,
       status: "success",
-      description: stoppedEarly
-        ? `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate} before the safe timeout limit.`
-        : `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate}.`,
+      description: `${email} fetched ${limitedConversations.length} conversation(s) from Intercom for ${startDate} to ${endDate}.`,
       safe_after: {
         start_date: startDate,
         end_date: endDate,
@@ -1051,14 +878,10 @@ export async function POST(request) {
         fetched_count: limitedConversations.length,
         searched_dates: searchedDates,
         conversation_ratings: conversationRatings.length ? conversationRatings : "any",
-        cx_score_ratings: cxScoreRatings.length ? cxScoreRatings : "any",
         selected_employee_names: selectedEmployeeNames,
         selected_intercom_agent_names: selectedIntercomAgentNames,
-        hydration_count: hydrationCounter.count,
-        stopped_early: stoppedEarly,
-        stop_reason: stopReason,
-        cx_score_search_field: cxScoreSearchState.field || "",
-        cx_score_search_fallback: Boolean(cxScoreSearchState.unsupported),
+        selected_admin_assignee_ids: selectedAdminAssigneeIds,
+        unresolved_agent_names: unresolvedSelectedAgentNames,
         key_source: intercomKey.source,
       },
     });
@@ -1068,7 +891,7 @@ export async function POST(request) {
       message:
         limitedConversations.length > 0
           ? "Conversations fetched successfully."
-          : "No conversations found for the selected date range.",
+          : "No conversations found for the selected filters.",
       meta: {
         startDate,
         endDate,
@@ -1077,16 +900,12 @@ export async function POST(request) {
         requestedBy: email,
         searchedDates,
         fetchedCount: limitedConversations.length,
-        hydrationCount: hydrationCounter.count,
-        stoppedEarly,
-        stopReason,
-        cxScoreSearchField: cxScoreSearchState.field || "",
-        cxScoreSearchFallback: Boolean(cxScoreSearchState.unsupported),
         filters: {
           conversationRatings: conversationRatings.length ? conversationRatings : "any",
-          cxScoreRatings: cxScoreRatings.length ? cxScoreRatings : "any",
           employeeNames: selectedEmployeeNames,
           intercomAgentNames: selectedIntercomAgentNames,
+          adminAssigneeIds: selectedAdminAssigneeIds,
+          unresolvedAgentNames: unresolvedSelectedAgentNames,
         },
       },
       conversations: limitedConversations,
@@ -1095,17 +914,13 @@ export async function POST(request) {
             intercomPerPage: INTERCOM_PER_PAGE,
             maxFetchPagesPerDay: MAX_FETCH_PAGES_PER_DAY,
             conversationRatings: conversationRatings.length ? conversationRatings : "any",
-            cxScoreRatings: cxScoreRatings.length ? cxScoreRatings : "any",
             auth: {
               tokenSource: intercomKey.source,
               tokenFingerprint: intercomKey.fingerprint,
             },
+            selectedAdminAssigneeIds,
+            unresolvedSelectedAgentNames,
             dailySummary,
-            hydrationCount: hydrationCounter.count,
-            stoppedEarly,
-            stopReason,
-            cxScoreSearchField: cxScoreSearchState.field || "",
-            cxScoreSearchFallback: Boolean(cxScoreSearchState.unsupported),
           }
         : undefined,
     });
