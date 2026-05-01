@@ -278,7 +278,7 @@ async function writeSystemLog(adminClient, request, actor, payload) {
   }
 }
 
-function makeQueueRows(runId, conversations, batchSize = DEFAULT_BATCH_SIZE) {
+function makeQueueRows(runId, conversations, batchSize = DEFAULT_BATCH_SIZE, startIndex = 0) {
   const list = Array.isArray(conversations) ? conversations : [];
 
   return list
@@ -288,8 +288,8 @@ function makeQueueRows(runId, conversations, batchSize = DEFAULT_BATCH_SIZE) {
 
       return {
         run_id: runId,
-        sequence_no: index + 1,
-        batch_index: Math.floor(index / batchSize) + 1,
+        sequence_no: startIndex + index + 1,
+        batch_index: Math.floor((startIndex + index) / batchSize) + 1,
         conversation_id: conversationId,
         agent_name: normalizeText(item?.agentName || item?.agent_name) || null,
         client_email: normalizeText(item?.clientEmail || item?.client_email) || null,
@@ -306,6 +306,22 @@ function getConversationIds(conversations) {
     .map((item) => normalizeText(item?.conversationId || item?.conversation_id || item?.id))
     .filter(Boolean);
 }
+function mergeConversationsById(existing, incoming) {
+  const map = new Map();
+
+  for (const item of Array.isArray(existing) ? existing : []) {
+    const id = normalizeText(item?.conversationId || item?.conversation_id || item?.id);
+    if (id && !map.has(id)) map.set(id, item);
+  }
+
+  for (const item of Array.isArray(incoming) ? incoming : []) {
+    const id = normalizeText(item?.conversationId || item?.conversation_id || item?.id);
+    if (id && !map.has(id)) map.set(id, item);
+  }
+
+  return Array.from(map.values());
+}
+
 
 async function loadRunBundle(adminClient, runId) {
   if (!runId) return { run: null, queue: [], events: [] };
@@ -522,6 +538,105 @@ export async function POST(request) {
         target_label: `${queuedCount} queued conversation(s)`,
         details: `${fetchedCount} conversation(s) returned. ${queuedCount} queued for audit.`,
         metadata: { fetchedCount, queuedCount, totalBatches, meta: body.meta || {} },
+      });
+
+      const bundle = await loadRunBundle(auth.adminClient, runId);
+      return json({ ok: true, ...bundle });
+    }
+
+    if (action === "fetch_page_saved") {
+      const conversations = Array.isArray(body.conversations) ? body.conversations : [];
+      const batchSize = toInt(existingRun.batch_size, DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE;
+      const incomingIds = getConversationIds(conversations);
+      const done = Boolean(body.done);
+      const fetchState = body.fetchState && typeof body.fetchState === "object" ? body.fetchState : null;
+      const pageMeta = body.meta && typeof body.meta === "object" ? body.meta : {};
+
+      const { data: existingQueue, error: existingQueueError } = await auth.adminClient
+        .from("audit_workflow_queue")
+        .select("conversation_id")
+        .eq("run_id", runId)
+        .order("sequence_no", { ascending: true });
+
+      if (existingQueueError) throw new Error(existingQueueError.message || "Could not read workflow queue.");
+
+      const existingQueueIds = new Set(
+        (Array.isArray(existingQueue) ? existingQueue : [])
+          .map((item) => normalizeText(item.conversation_id))
+          .filter(Boolean)
+      );
+
+      const newConversations = conversations.filter((item) => {
+        const id = normalizeText(item?.conversationId || item?.conversation_id || item?.id);
+        return id && !existingQueueIds.has(id);
+      });
+
+      const startIndex = existingQueueIds.size;
+      const queueRows = makeQueueRows(runId, newConversations, batchSize, startIndex);
+
+      if (queueRows.length) {
+        const { error: insertError } = await auth.adminClient.from("audit_workflow_queue").insert(queueRows);
+        if (insertError) throw new Error(insertError.message || "Could not append workflow queue page.");
+      }
+
+      const existingConversations = Array.isArray(existingRun.fetched_conversations)
+        ? existingRun.fetched_conversations
+        : [];
+      const mergedConversations = mergeConversationsById(existingConversations, newConversations);
+      const fetchedCount = toInt(body.fetchedCount ?? pageMeta.fetchedCount, mergedConversations.length);
+      const queuedCount = mergedConversations.length;
+      const totalBatches = queuedCount ? Math.ceil(queuedCount / batchSize) : 0;
+      const nextStatus = done ? (queuedCount > 0 ? "fetched" : "completed") : "fetching";
+      const previousPayload = existingRun.safe_payload && typeof existingRun.safe_payload === "object"
+        ? existingRun.safe_payload
+        : {};
+
+      await updateRun(auth.adminClient, runId, {
+        status: nextStatus,
+        stage: done ? (queuedCount > 0 ? "fetch_completed" : "completed") : "fetching_page",
+        status_message: done
+          ? queuedCount
+            ? `${queuedCount} conversation(s) fetched and queued.`
+            : "Fetch completed with no conversations found."
+          : `${queuedCount} conversation(s) fetched so far. Fetch is still paging through Intercom.`,
+        fetched_count: fetchedCount,
+        queued_count: queuedCount,
+        total_batches: totalBatches,
+        fetched_conversations: mergedConversations,
+        safe_payload: {
+          ...previousPayload,
+          fetch_pagination: {
+            done,
+            fetchState,
+            lastMeta: pageMeta,
+            updatedAt: now,
+          },
+        },
+        progress_percent: done ? (queuedCount ? 20 : 100) : Math.max(Number(existingRun.progress_percent || 5), 10),
+        completed_at: done && !queuedCount ? now : null,
+      });
+
+      await writeWorkflowEvent(auth.adminClient, runId, {
+        event_type: done ? "fetch_completed" : "fetch_page_saved",
+        event_label: done ? "Fetch Completed" : "Fetch Page Saved",
+        status: done ? (queuedCount ? "success" : "info") : "info",
+        actor_email: auth.email,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.profile?.role,
+        stage: done ? "fetch_completed" : "fetching",
+        target_label: `${queuedCount} queued conversation(s)`,
+        details: done
+          ? `${queuedCount} total conversation(s) are ready in the audit queue.`
+          : `${queueRows.length} new conversation(s) added. ${queuedCount} total conversation(s) fetched so far.`,
+        metadata: {
+          incomingIds,
+          newCount: queueRows.length,
+          queuedCount,
+          fetchedCount,
+          done,
+          fetchState,
+          pageMeta,
+        },
       });
 
       const bundle = await loadRunBundle(auth.adminClient, runId);
