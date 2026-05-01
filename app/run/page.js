@@ -880,7 +880,7 @@ function DuplicateWarningModal({
           <div className="modal-count">{formatNumber(duplicateCount)}</div>
         </div>
 
-        <h2>Existing result rows were found</h2>
+        <h2>Existing Result Rows Were Found</h2>
         <p className="modal-copy">
           {formatNumber(duplicateCount)} conversation audit(s) in this run already exist in Results.
           Choose what should happen before the audit continues.
@@ -888,13 +888,13 @@ function DuplicateWarningModal({
 
         <div className="modal-note-grid">
           <div className="modal-note-card">
-            <span>Skip existing</span>
+            <span>Skip Existing</span>
             <strong>Preserves old rows</strong>
             <small>New rows are created only for conversations that are not already stored.</small>
           </div>
 
           <div className="modal-note-card">
-            <span>Overwrite existing</span>
+            <span>Overwrite Existing</span>
             <strong>Refreshes stored rows</strong>
             <small>Existing matching rows are replaced with the new audit result.</small>
           </div>
@@ -916,7 +916,7 @@ function DuplicateWarningModal({
         <div className="modal-hint">
           <SparklesIcon />
           <span>
-            Auto-run uses <strong>{willAutoOverwrite ? "Overwrite Existing" : "Skip Existing"}</strong>{" "}
+            Auto-Run uses <strong>{willAutoOverwrite ? "Overwrite Existing" : "Skip Existing"}</strong>{" "}
             when duplicates appear automatically.
           </span>
         </div>
@@ -1958,7 +1958,7 @@ export default function RunPage() {
   function toggleAutoRun() {
     setAutoRunAfterFetch((prev) => {
       const next = !prev;
-      addLog(`Auto-run ${next ? "enabled" : "disabled"}.`, next ? "success" : "neutral");
+      addLog(`Auto-Run ${next ? "enabled" : "disabled"}.`, next ? "success" : "neutral");
       return next;
     });
   }
@@ -2640,7 +2640,7 @@ export default function RunPage() {
 
   function performClearFetchedQueue() {
     if (!fetchedConversations.length) return;
-    applyQueueUpdate([], "Fetched queue cleared. Fetch again to rebuild the audit queue.");
+    applyQueueUpdate([], "Fetched Queue cleared. Fetch again to rebuild the audit queue.");
   }
 
   function removeSelectedFromQueue() {
@@ -2674,7 +2674,7 @@ export default function RunPage() {
       title: "Clear The Fetched Queue?",
       countLabel: formatNumber(fetchedConversations.length),
       message:
-        "This will remove every fetched conversation currently shown in the Run Audit queue. You will need to fetch again to rebuild the queue.",
+        "This will remove every fetched conversation currently shown in the Run Audit Queue. You will need to fetch again to rebuild the queue.",
       details: [
         { label: "Fetched Queue", value: `${formatNumber(fetchedConversations.length)} conversation(s)`, helper: "All queued rows will be removed from this workflow view." },
         { label: "Audit Queue", value: `${formatNumber(queuedConversationCount)} conversation(s)`, helper: "No Intercom data or existing Results rows are deleted." },
@@ -2948,7 +2948,7 @@ export default function RunPage() {
       fetchAbortRef.current = null;
 
       if (autoRunAfterFetch && fetchedCount > 0) {
-        addLog("Auto-run enabled. Starting batch audit automatically after paginated fetch.", "success");
+        addLog("Auto-Run enabled. Starting batch audit automatically after paginated fetch.", "success");
         await startBatchAudit({
           conversationsOverride: accumulatedConversations,
           duplicateMode: "",
@@ -2995,7 +2995,7 @@ export default function RunPage() {
         action: "run_large_audit",
         tone: "warning",
         badge: "Large Audit Queue",
-        title: "Run Audit On A Large Queue?",
+        title: "Run Audit on a Large Queue?",
         countLabel: formatNumber(queueCount),
         message:
           "This audit will process a large queue in batches. It may take several minutes, and completed batches may be saved to Results even if the run is later cancelled.",
@@ -3111,13 +3111,13 @@ export default function RunPage() {
 
   const statCards = [
     {
-      label: "Fetched queue",
+      label: "Fetched Queue",
       value: fetchData?.meta?.fetchedCount ? formatNumber(fetchData.meta.fetchedCount) : "0",
       subtext: "Conversations returned from Intercom",
       tone: fetchData?.meta?.fetchedCount ? "success" : "neutral",
     },
     {
-      label: "Audit queue",
+      label: "Audit Queue",
       value: queuedConversationCount ? formatNumber(queuedConversationCount) : "0",
       subtext: limiterEnabled ? "Conversations ready after limiter" : "Conversations ready to audit",
       tone: queuedConversationCount ? "notice" : "neutral",
@@ -3129,7 +3129,7 @@ export default function RunPage() {
       tone: runData?.meta?.auditedCount ? (runData?.partial ? "warning" : "success") : "neutral",
     },
     {
-      label: "Auto-run",
+      label: "Auto-Run",
       value: autoRunAfterFetch ? "On" : "Off",
       subtext: autoRunAfterFetch ? "Starts after fetch finishes" : "Manual audit start",
       tone: autoRunAfterFetch ? "success" : "neutral",
@@ -3170,7 +3170,7 @@ export default function RunPage() {
         { label: "Limiter", value: limiterOff ? "Off" : `Up to ${formatNumber(parsedLimit)} conversation(s)`, helper: limiterOff ? "All eligible conversations can be fetched." : "High limit selected." },
         { label: "Ratings", value: anyRating ? "Any Rating" : describeSelection(conversationRatings, "Any Rating"), helper: anyRating ? "The rating filter is broad." : "Using selected conversation ratings." },
         { label: "Agent Scope", value: allAgents ? "All Employees" : selectedFilterSummary.employees, helper: allAgents ? "No Employee, Intercom Agent, or Supervisor Team filter is narrowing this fetch." : selectedFilterSummary.agents },
-        { label: "Auto-run", value: autoRunAfterFetch ? "On" : "Off", helper: autoRunAfterFetch ? "Audit will start automatically after fetch completes." : "Audit will wait for a manual start." },
+        { label: "Auto-Run", value: autoRunAfterFetch ? "On" : "Off", helper: autoRunAfterFetch ? "Audit will start automatically after fetch completes." : "Audit will wait for a manual start." },
       ],
       note: "Use Start Fetch only when this broad range is intentional. Choose Go Back to narrow the date range, enable the limiter, or select a team/employee first.",
       confirmText: "Start Fetch",
@@ -3250,7 +3250,7 @@ export default function RunPage() {
         <div className="run-intro-meta">
           <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
           <strong>{startDate && endDate ? `${startDate} to ${endDate}` : "Choose Date Range"}</strong>
-          <small>{selectedPresetLabel} · Auto-run {autoRunAfterFetch ? "On" : "Off"}</small>
+          <small>{selectedPresetLabel} · Auto-Run {autoRunAfterFetch ? "On" : "Off"}</small>
         </div>
       </section>
 
@@ -3304,8 +3304,8 @@ export default function RunPage() {
         <div className="surface-card command-card">
           <div className="section-head">
             <div>
-              <span className="mini-label">Command center</span>
-              <h2>Setup and controls</h2>
+              <span className="mini-label">Command Center</span>
+              <h2>Setup and Controls</h2>
             </div>
             <button
               type="button"
@@ -3313,7 +3313,7 @@ export default function RunPage() {
               onClick={toggleAutoRun}
             >
               <span />
-              {autoRunAfterFetch ? "Auto-run enabled" : "Auto-run after fetch"}
+              {autoRunAfterFetch ? "Auto-Run enabled" : "Auto-Run after fetch"}
             </button>
           </div>
 
@@ -3342,7 +3342,7 @@ export default function RunPage() {
             <div className="control-block">
               <div className="block-head">
                 <span className="mini-label">Step 1</span>
-                <h3>Choose the audit range</h3>
+                <h3>Choose the Audit Range</h3>
               </div>
 
               <RunDateRangePicker
@@ -3358,7 +3358,7 @@ export default function RunPage() {
             <div className="control-block filter-control-block">
               <div className="block-head">
                 <span className="mini-label">Step 2</span>
-                <h3>Choose fetch filters</h3>
+                <h3>Choose Fetch Filters</h3>
                 <small>These filters control which Intercom conversations are fetched before the GPT audit starts.</small>
               </div>
 
@@ -3439,7 +3439,7 @@ export default function RunPage() {
 
                   {limiterEnabled ? (
                     <label>
-                      <span>Conversation limit</span>
+                      <span>Conversation Limit</span>
                       <input
                         type="number"
                         min="1"
@@ -3473,7 +3473,7 @@ export default function RunPage() {
                 >
                   <div className="behavior-row">
                     <div>
-                      <span className="mini-label">Auto-run</span>
+                      <span className="mini-label">Auto-Run</span>
                       <strong>{autoRunAfterFetch ? "Enabled" : "Disabled"}</strong>
                     </div>
                     <button
@@ -3499,20 +3499,20 @@ export default function RunPage() {
             <div className="control-block action-block">
               <div className="block-head">
                 <span className="mini-label">Step 4</span>
-                <h3>Run the workflow</h3>
+                <h3>Run the Workflow</h3>
               </div>
 
               <div className="action-summary-grid">
                 <div>
-                  <span className="mini-label">Fetched queue</span>
+                  <span className="mini-label">Fetched Queue</span>
                   <strong>{formatNumber(fetchedConversations.length)}</strong>
                 </div>
                 <div>
-                  <span className="mini-label">Audit queue</span>
+                  <span className="mini-label">Audit Queue</span>
                   <strong>{formatNumber(queuedConversationCount)}</strong>
                 </div>
                 <div>
-                  <span className="mini-label">Duplicate handling</span>
+                  <span className="mini-label">Duplicate Handling</span>
                   <strong>
                     {duplicateWarningOpen
                       ? "Decision needed"
@@ -3522,7 +3522,7 @@ export default function RunPage() {
                   </strong>
                   <small>
                     {autoRunAfterFetch
-                      ? "Auto-run applies the safe duplicate rule."
+                      ? "Auto-Run applies the safe duplicate rule."
                       : "Manual runs pause only if duplicates are found."}
                   </small>
                 </div>
@@ -3536,11 +3536,11 @@ export default function RunPage() {
                     onClick={handleFetchConversations}
                     disabled={!canRunTests || !session?.user || !startDate || !endDate || runLoading}
                   >
-                    Fetch conversations
+                    Fetch Conversations
                   </button>
                 ) : (
                   <button type="button" className="danger-btn" onClick={handleCancelFetch}>
-                    Cancel fetch
+                    Cancel Fetch
                   </button>
                 )}
 
@@ -3551,11 +3551,11 @@ export default function RunPage() {
                     onClick={handleRunAudit}
                     disabled={fetchLoading || !fetchedConversations.length}
                   >
-                    Run audit
+                    Run Audit
                   </button>
                 ) : (
                   <button type="button" className="danger-btn" onClick={handleCancelAudit}>
-                    Cancel audit
+                    Cancel Audit
                   </button>
                 )}
               </div>
@@ -3576,8 +3576,8 @@ export default function RunPage() {
           <div className="surface-card monitor-card">
             <div className="section-head compact alt">
               <div>
-                <span className="mini-label">Live monitor</span>
-                <h2>Progress and system feedback</h2>
+                <span className="mini-label">Live Monitor</span>
+                <h2>Progress and System Feedback</h2>
               </div>
               <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
             </div>
@@ -3637,8 +3637,8 @@ export default function RunPage() {
           <div className="surface-card run-summary-card">
             <div className="section-head compact alt">
               <div>
-                <span className="mini-label">Run summary</span>
-                <h2>At a glance</h2>
+                <span className="mini-label">Run Summary</span>
+                <h2>At a Glance</h2>
               </div>
             </div>
 
@@ -3674,7 +3674,7 @@ export default function RunPage() {
             <div className="section-head compact alt">
               <div>
                 <span className="mini-label">Execution log</span>
-                <h2>Recent activity</h2>
+                <h2>Recent Activity</h2>
               </div>
               <button type="button" className="ghost-btn small" onClick={() => setExecutionLog([])}>
                 Clear log
@@ -3710,8 +3710,8 @@ export default function RunPage() {
       <section className="surface-card preview-panel fetched-queue-panel compact-preview-panel">
         <div className="section-head">
           <div>
-            <span className="mini-label">Fetched conversation preview</span>
-            <h2>Fetched queue</h2>
+            <span className="mini-label">Fetched Conversation Preview</span>
+            <h2>Fetched Queue</h2>
             <p className="soft-copy">Review, preview, remove, or skip conversations before starting the GPT audit.</p>
           </div>
           <div className="header-right-meta">
@@ -3722,14 +3722,14 @@ export default function RunPage() {
         </div>
 
         {!fetchData ? (
-          <div className="empty-box">Fetch conversations first. The queue table will appear here.</div>
+          <div className="empty-box">Fetch Conversations first. The queue table will appear here.</div>
         ) : fetchedConversations.length === 0 ? (
           <div className="empty-box">No conversations are currently queued. Fetch again or adjust filters.</div>
         ) : (
           <>
             <div className="fetched-queue-toolbar">
               <label className="queue-search-field">
-                <span>Search fetched conversations</span>
+                <span>Search Fetched Conversations</span>
                 <input
                   value={queueSearchText}
                   onChange={(event) => setQueueSearchText(event.target.value)}
@@ -3804,8 +3804,8 @@ export default function RunPage() {
       <section className="surface-card output-panel">
         <div className="section-head">
           <div>
-            <span className="mini-label">Audit output</span>
-            <h2>Result cards</h2>
+            <span className="mini-label">Audit Output</span>
+            <h2>Result Cards</h2>
           </div>
 
           <div className="result-metrics">
@@ -3823,11 +3823,11 @@ export default function RunPage() {
           <>
             <div className="run-meta-card polished">
               <div>
-                <span>Requested by</span>
+                <span>Requested By</span>
                 <strong>{runData?.meta?.requestedBy || "-"}</strong>
               </div>
               <div>
-                <span>Duplicate handling</span>
+                <span>Duplicate Handling</span>
                 <strong>{runData?.meta?.duplicateModeApplied || "none"}</strong>
               </div>
               <div>
@@ -3919,15 +3919,15 @@ export default function RunPage() {
             <summary>Fetch diagnostics</summary>
             <div className="diagnostics-grid">
               <div>
-                <span>Intercom per page</span>
+                <span>Intercom Per Page</span>
                 <strong>{fetchData?.debug?.intercomPerPage ?? "-"}</strong>
               </div>
               <div>
-                <span>Max pages per day</span>
+                <span>Max Pages per Day</span>
                 <strong>{fetchData?.debug?.maxFetchPagesPerDay ?? "-"}</strong>
               </div>
               <div>
-                <span>Daily summaries</span>
+                <span>Daily Summaries</span>
                 <strong>{formatNumber(dailySummary.length)}</strong>
               </div>
             </div>
@@ -4007,7 +4007,7 @@ const runStyles = `
   .duplicate-sample-box span {
     margin: 0 0 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -4086,7 +4086,7 @@ const runStyles = `
     color: #e7ecff;
     border: 1px solid rgba(129, 140, 248, 0.24);
     background: rgba(99, 102, 241, 0.16);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -4095,7 +4095,7 @@ const runStyles = `
   .state-pill {
     min-height: 34px;
     padding: 0 12px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -4172,14 +4172,14 @@ const runStyles = `
 
   h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: 20px;
     letter-spacing: -0.03em;
   }
 
   .hero-copy {
     margin: 0 0 20px;
     color: #a9b4d0;
-    font-size: 18px;
+    font-size: 20px;
     line-height: 1.65;
     max-width: 760px;
   }
@@ -4210,7 +4210,7 @@ const runStyles = `
   .hero-summary-card strong {
     display: block;
     color: #f5f7ff;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.7;
   }
 
@@ -4230,7 +4230,7 @@ const runStyles = `
   }
 
   .hero-quick-card strong {
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.45;
     color: #f5f7ff;
   }
@@ -4238,7 +4238,7 @@ const runStyles = `
   .hero-quick-card small {
     margin-top: 6px;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.55;
   }
 
@@ -4286,7 +4286,7 @@ const runStyles = `
     place-items: center;
     border-radius: 14px;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
     box-shadow: 0 10px 22px rgba(91, 33, 182, 0.28);
@@ -4294,7 +4294,7 @@ const runStyles = `
 
   .workflow-step strong {
     display: block;
-    font-size: 15px;
+    font-size: 17px;
     margin-bottom: 6px;
   }
 
@@ -4304,7 +4304,7 @@ const runStyles = `
     line-height: 1.6;
     letter-spacing: normal;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
   }
 
@@ -4318,7 +4318,7 @@ const runStyles = `
     align-items: center;
     gap: 10px;
     color: #dce7ff;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.6;
   }
 
@@ -4368,7 +4368,7 @@ const runStyles = `
   .stat-card p {
     margin: 0 0 10px;
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -4384,7 +4384,7 @@ const runStyles = `
 
   .stat-card span {
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
     line-height: 1.6;
   }
@@ -4495,7 +4495,7 @@ const runStyles = `
   }
 
   .auth-shell-card strong {
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.5;
     word-break: break-word;
   }
@@ -4503,7 +4503,7 @@ const runStyles = `
   .auth-shell-card small {
     margin-top: 4px;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
   }
 
@@ -4555,7 +4555,7 @@ const runStyles = `
     display: block;
     margin-bottom: 10px;
     color: #9fb2ee;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
   }
 
@@ -4584,19 +4584,19 @@ const runStyles = `
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 800;
     color: #ffffff;
   }
 
   .preset-button small {
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .preset-button b {
     color: #9fb2ee;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .preset-menu {
@@ -4622,7 +4622,7 @@ const runStyles = `
     background: rgba(255, 255, 255, 0.03);
     color: #dbe7ff;
     font: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
     text-align: left;
     cursor: pointer;
@@ -4658,7 +4658,7 @@ const runStyles = `
     color: #f5f7ff;
     outline: none;
     font: inherit;
-    font-size: 14px;
+    font-size: 16px;
   }
 
   input:focus {
@@ -4734,14 +4734,14 @@ const runStyles = `
 
   .behavior-row strong {
     display: block;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.4;
   }
 
   .behavior-copy {
     display: block;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
   }
 
@@ -4809,7 +4809,7 @@ const runStyles = `
 
   .action-summary-grid strong {
     display: block;
-    font-size: 17px;
+    font-size: 18px;
     line-height: 1.45;
     color: #ffffff;
   }
@@ -4818,7 +4818,7 @@ const runStyles = `
     display: block;
     margin-top: 6px;
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.55;
     font-weight: 700;
   }
@@ -4881,7 +4881,7 @@ const runStyles = `
   .ghost-btn.small {
     min-height: 38px;
     padding: 0 12px;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   button:disabled {
@@ -4899,7 +4899,7 @@ const runStyles = `
   .message {
     padding: 14px 16px;
     border-radius: 16px;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.6;
   }
@@ -4940,7 +4940,7 @@ const runStyles = `
 
   .resting-panel strong {
     display: block;
-    font-size: 18px;
+    font-size: 20px;
     margin-bottom: 6px;
   }
 
@@ -4948,7 +4948,7 @@ const runStyles = `
     margin: 0;
     color: #a9b4d0;
     line-height: 1.7;
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .progress-visual {
@@ -5129,13 +5129,13 @@ const runStyles = `
     margin: 0;
     color: #a9b4d0;
     line-height: 1.6;
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .progress-percent-chip {
     min-height: 38px;
     padding: 0 12px;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 900;
   }
 
@@ -5170,7 +5170,7 @@ const runStyles = `
 
   .progress-metrics-grid strong {
     display: block;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.45;
   }
 
@@ -5189,7 +5189,7 @@ const runStyles = `
   }
 
   .progress-tip small {
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
   }
 
@@ -5215,7 +5215,7 @@ const runStyles = `
   .mini-grid.polished strong,
   .run-meta-card.polished strong {
     display: block;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.5;
     color: #ffffff;
   }
@@ -5241,14 +5241,14 @@ const runStyles = `
 
   .log-item span {
     color: #9fb2ee;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
   .log-item strong {
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.7;
   }
 
@@ -5284,7 +5284,7 @@ const runStyles = `
   .count-pill {
     min-height: 34px;
     padding: 0 12px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
   }
 
@@ -5318,7 +5318,7 @@ const runStyles = `
 
   .conversation-head strong {
     display: block;
-    font-size: 17px;
+    font-size: 18px;
     line-height: 1.4;
     color: #ffffff;
   }
@@ -5343,7 +5343,7 @@ const runStyles = `
   .conversation-details strong {
     display: block;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.55;
     word-break: break-word;
   }
@@ -5358,7 +5358,7 @@ const runStyles = `
   .findings-box {
     margin: 0;
     color: #dbe7ff;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.75;
   }
 
@@ -5375,7 +5375,7 @@ const runStyles = `
     align-items: center;
     border-radius: 999px;
     color: #dbe7ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
@@ -5390,7 +5390,7 @@ const runStyles = `
   .empty-box {
     padding: 22px;
     color: #a9b4d0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.7;
   }
 
@@ -5401,7 +5401,7 @@ const runStyles = `
   details summary {
     cursor: pointer;
     list-style: none;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 900;
     color: #ffffff;
   }
@@ -5426,7 +5426,7 @@ const runStyles = `
 
   .diagnostics-grid strong {
     display: block;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.5;
     color: #ffffff;
   }
@@ -5442,7 +5442,7 @@ const runStyles = `
     background: rgba(8, 13, 28, 0.92);
     color: #dbeafe;
     font: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     cursor: pointer;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
@@ -5512,7 +5512,7 @@ const runStyles = `
     margin: 0 0 16px;
     color: #a9b4d0;
     line-height: 1.75;
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .modal-note-grid,
@@ -5539,7 +5539,7 @@ const runStyles = `
     display: block;
     margin-bottom: 6px;
     color: #8ea0d6;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 950;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -5559,14 +5559,14 @@ const runStyles = `
 
   .modal-note-card strong {
     margin-bottom: 6px;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.45;
     color: #ffffff;
   }
 
   .modal-note-card small {
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.65;
   }
 
@@ -5587,7 +5587,7 @@ const runStyles = `
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 14px;
     color: #dbe7ff;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
@@ -5595,7 +5595,7 @@ const runStyles = `
 
   .duplicate-sample-box small {
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .modal-hint {
@@ -5604,7 +5604,7 @@ const runStyles = `
     gap: 8px;
     margin-bottom: 16px;
     color: #dbe7ff;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
   }
 
@@ -5641,7 +5641,7 @@ const runStyles = `
   .run-intro-strip p {
     margin: 0;
     color: #a9b4d0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.65;
     max-width: 820px;
   }
@@ -5664,12 +5664,12 @@ const runStyles = `
 
   .run-intro-meta strong {
     color: #f5f7ff;
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .run-intro-meta small {
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
   }
 
@@ -5679,7 +5679,7 @@ const runStyles = `
 
   .filter-control-block .block-head small {
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
     font-weight: 750;
   }
@@ -5703,7 +5703,7 @@ const runStyles = `
 
   .run-multi-filter label > small {
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.55;
     font-weight: 750;
     text-transform: none;
@@ -5734,14 +5734,14 @@ const runStyles = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 900;
   }
 
   .run-multi-button b,
   .run-date-button b {
     color: #9fb2ee;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
   }
 
@@ -5797,7 +5797,7 @@ const runStyles = `
 
   .run-multi-option span {
     color: #93c5fd;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -5805,14 +5805,14 @@ const runStyles = `
 
   .run-multi-option strong {
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.35;
   }
 
   .run-multi-option em {
     grid-column: 2;
     color: #9fb2ee;
-    font-size: 11px;
+    font-size: 13px;
     font-style: normal;
     line-height: 1.4;
   }
@@ -5826,7 +5826,7 @@ const runStyles = `
   .run-multi-empty {
     padding: 14px;
     color: #8ea0d6;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .filter-summary-grid {
@@ -5850,7 +5850,7 @@ const runStyles = `
 
   .filter-summary-grid span {
     color: #8ea0d6;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -5859,7 +5859,7 @@ const runStyles = `
 
   .filter-summary-grid strong {
     color: #f8fbff;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.45;
   }
 
@@ -5886,7 +5886,7 @@ const runStyles = `
 
   .run-date-button small {
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
   }
 
@@ -5929,7 +5929,7 @@ const runStyles = `
 
   .date-popover-tabs span {
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -5938,7 +5938,7 @@ const runStyles = `
 
   .date-popover-tabs strong {
     color: #f8fbff;
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .date-popover-body {
@@ -5962,7 +5962,7 @@ const runStyles = `
     min-height: 38px;
     padding: 0 10px;
     font: inherit;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     cursor: pointer;
   }
@@ -5984,7 +5984,7 @@ const runStyles = `
 
   .calendar-nav-row strong {
     color: #f8fbff;
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .calendar-months-grid {
@@ -5996,7 +5996,7 @@ const runStyles = `
   .calendar-month-card h4 {
     margin: 0 0 12px;
     color: #f8fbff;
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .calendar-weekdays,
@@ -6008,7 +6008,7 @@ const runStyles = `
 
   .calendar-weekdays span {
     color: #8ea0d6;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     text-align: center;
     padding: 6px 0;
@@ -6021,7 +6021,7 @@ const runStyles = `
     background: transparent;
     color: #dbe7ff;
     font: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 850;
     cursor: pointer;
   }
@@ -6178,7 +6178,7 @@ const runStyles = `
 
   .quick-run-copy strong {
     color: #ffffff;
-    font-size: 18px;
+    font-size: 20px;
     letter-spacing: -0.02em;
     line-height: 1.3;
   }
@@ -6186,7 +6186,7 @@ const runStyles = `
   .quick-run-copy small {
     margin-top: 5px;
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 750;
     line-height: 1.45;
   }
@@ -6212,7 +6212,7 @@ const runStyles = `
 
   .quick-run-metrics span {
     color: #8ea0d6;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -6346,21 +6346,21 @@ const runStyles = `
   }
   .fetched-queue-panel.compact-preview-panel { padding: 20px; }
   .fetched-queue-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 14px; align-items: end; margin-bottom: 14px; }
-  .queue-search-field span { display: block; margin-bottom: 8px; color: #8ea0d6; font-size: 11px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+  .queue-search-field span { display: block; margin-bottom: 8px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
   .queue-search-field input { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.16); color: #e7ecff; background: rgba(5,8,18,.92); outline: none; }
   .queue-toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
   .queue-table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.35); max-height: 420px; }
   .queue-table { width: 100%; border-collapse: collapse; min-width: 980px; }
   .queue-table th, .queue-table td { padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,.1); text-align: left; vertical-align: top; }
-  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.86); font-size: 10px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
-  .queue-table td { color: #e7ecff; font-size: 13px; font-weight: 750; }
-  .queue-table small { display: block; margin-top: 4px; color: #8ea0d6; font-size: 11px; line-height: 1.4; }
+  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.86); font-size: 12px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
+  .queue-table td { color: #e7ecff; font-size: 15px; font-weight: 750; }
+  .queue-table small { display: block; margin-top: 4px; color: #8ea0d6; font-size: 13px; line-height: 1.4; }
   .queue-select { width: 18px; height: 18px; accent-color: #22d3ee; }
   .queue-action-cell { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .queue-action-btn { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.9); color: #e7ecff; font-size: 11px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .queue-action-btn { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.9); color: #e7ecff; font-size: 13px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; }
   .queue-action-btn:hover { border-color: rgba(34,211,238,.45); background: rgba(14,165,233,.16); }
   .queue-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
-  .ai-working-inline { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(148,163,184,.24); background: rgba(15,23,42,.78); color: #e5e7eb; font-size: 13px; font-weight: 900; box-shadow: 0 12px 34px rgba(0,0,0,.24); }
+  .ai-working-inline { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(148,163,184,.24); background: rgba(15,23,42,.78); color: #e5e7eb; font-size: 15px; font-weight: 900; box-shadow: 0 12px 34px rgba(0,0,0,.24); }
   .gear-loader { position: relative; width: 42px; height: 28px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   .gear-loader::before, .gear-loader::after { content: "⚙︎"; position: absolute; font-family: Arial, Helvetica, sans-serif; line-height: 1; color: #d1d5db; text-shadow: 0 8px 18px rgba(0,0,0,.48); animation: gearSpin 1.8s linear infinite; }
   .gear-loader::before { left: 0; top: 0; font-size: 27px; }
@@ -6369,24 +6369,24 @@ const runStyles = `
   .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2,6,23,.76); backdrop-filter: blur(16px); }
   .conversation-preview-modal { width: min(980px, 96vw); max-height: min(86vh, 860px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148,163,184,.18); border-radius: 28px; background: linear-gradient(180deg,#10172b 0%,#050917 100%); box-shadow: 0 34px 120px rgba(0,0,0,.76), 0 0 0 1px rgba(96,165,250,.08); }
   .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: 1px solid rgba(148,163,184,.12); }
-  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 11px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
+  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
   .conversation-preview-head h2 { margin: 0 0 6px; color: #fff; font-size: 26px; letter-spacing: -.04em; }
-  .conversation-preview-head span { color: #a9b4d0; font-size: 13px; font-weight: 750; }
+  .conversation-preview-head span { color: #a9b4d0; font-size: 15px; font-weight: 750; }
   .conversation-preview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
   .conversation-preview-meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid rgba(148,163,184,.1); }
   .conversation-preview-meta div { min-height: 62px; padding: 12px; border-radius: 16px; border: 1px solid rgba(148,163,184,.1); background: rgba(255,255,255,.035); }
   .conversation-preview-meta span, .conversation-preview-meta strong { display: block; }
-  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 10px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
-  .conversation-preview-meta strong { color: #f8fbff; font-size: 13px; line-height: 1.35; }
+  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
+  .conversation-preview-meta strong { color: #f8fbff; font-size: 15px; line-height: 1.35; }
   .conversation-transcript-list { overflow: auto; padding: 20px 24px 24px; display: grid; gap: 12px; }
   .conversation-message { max-width: 82%; padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(15,23,42,.82); }
   .conversation-message.client { justify-self: start; border-color: rgba(59,130,246,.18); background: rgba(30,64,175,.18); }
   .conversation-message.agent { justify-self: end; border-color: rgba(16,185,129,.18); background: rgba(6,78,59,.18); }
   .conversation-message.system { justify-self: center; max-width: 92%; background: rgba(255,255,255,.045); }
   .conversation-message-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  .conversation-message-top strong { color: #f8fbff; font-size: 13px; }
-  .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 11px; font-weight: 800; }
-  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 13px; }
+  .conversation-message-top strong { color: #f8fbff; font-size: 15px; }
+  .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 13px; font-weight: 800; }
+  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
   .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 24px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148,163,184,.18); color: #dbe7ff; background: rgba(15,23,42,.7); }
   .conversation-preview-error strong, .conversation-preview-error span, .conversation-preview-error small { display: block; }
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
