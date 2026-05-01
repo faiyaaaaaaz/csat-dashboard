@@ -2283,7 +2283,7 @@ export default function AdminPage() {
         </div>
 
         <div className="hero-side-card">
-          <span>Current access</span>
+          <span>Current Access</span>
           <strong>{authChecked ? roleLabel(profile?.role) : "Checking..."}</strong>
           <small>{profile?.email || session?.user?.email || "Not signed in"}</small>
         </div>
@@ -2341,15 +2341,15 @@ export default function AdminPage() {
       {!session?.user ? (
         <section className="panel gate-panel">
           <p className="eyebrow">Sign In Required</p>
-          <h2>Admin Is Ready, But You Are Not Signed In.</h2>
-          <p className="muted">Use Your nextventures.io Google Account To Continue.</p>
+          <h2>Admin Is Ready, but You Are Not Signed In.</h2>
+          <p className="muted">Use your nextventures.io Google account to continue.</p>
           <button type="button" className="primary-btn" onClick={handleGoogleLogin}>
-            Sign In With Google
+            Sign In with Google
           </button>
         </section>
       ) : !isAdmin ? (
         <section className="panel gate-panel">
-          <p className="eyebrow">Admin access required</p>
+          <p className="eyebrow">Admin Access Required</p>
           <h2>This section is restricted.</h2>
           <p className="muted">Please contact the Master Admin if you need Admin access.</p>
         </section>
@@ -2671,7 +2671,7 @@ export default function AdminPage() {
                 <div>
                   <p className="eyebrow">Live configuration</p>
                   <h2>Live Prompt</h2>
-                  <p className="muted">This Is The Prompt Used By New Audits. Update It Here Without Changing Code.</p>
+                  <p className="muted">This is the prompt used by new audits. Update it here without changing code.</p>
                 </div>
 
                 <span className={dbReady ? "status active" : "status inactive"}>
@@ -3064,7 +3064,7 @@ export default function AdminPage() {
                 <div>
                   <p className="eyebrow">Saved supervisor teams</p>
                   <h2>Team Directory</h2>
-                  <p className="muted">Edit Supervisor Groups And Keep Dashboard Filtering Clean.</p>
+                  <p className="muted">Edit Supervisor Groups and keep Dashboard filtering clean.</p>
                 </div>
               </div>
 
@@ -3270,7 +3270,7 @@ export default function AdminPage() {
                 <div>
                   <p className="eyebrow">Detected agents</p>
                   <h2>Suggested Mappings</h2>
-                  <p className="muted">Agents Found In Stored Results Without Saved Mappings.</p>
+                  <p className="muted">Agents found in stored results without saved mappings.</p>
                 </div>
               </div>
 
@@ -3325,7 +3325,7 @@ export default function AdminPage() {
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Mapping risk</p>
-                  <h2>Unmapped agents</h2>
+                  <h2>Unmapped Agents</h2>
                   <p className="muted">Stored agents without active mapping coverage.</p>
                 </div>
               </div>
@@ -3379,7 +3379,7 @@ export default function AdminPage() {
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Mapping summary</p>
-                  <h2>Current status</h2>
+                  <h2>Current Status</h2>
                 </div>
               </div>
 
@@ -3634,7 +3634,7 @@ export default function AdminPage() {
             <div className="section-head">
               <div>
                 <p className="eyebrow">Mapping Table</p>
-                <h2>Agent mappings</h2>
+                <h2>Agent Mappings</h2>
                 <p className="muted">Edit, activate, deactivate, and review mapping quality.</p>
               </div>
 
@@ -3819,7 +3819,7 @@ export default function AdminPage() {
             <div className="section-head">
               <div>
                 <p className="eyebrow">Prompt History</p>
-                <h2>Recent changes</h2>
+                <h2>Recent Changes</h2>
                 <p className="muted">Recent saved prompt changes.</p>
               </div>
             </div>
@@ -3904,7 +3904,7 @@ const adminStyles = `
   .eyebrow {
     margin: 0 0 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -3966,7 +3966,7 @@ const adminStyles = `
     justify-content: center;
     width: fit-content;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     text-decoration: none;
   }
@@ -4006,20 +4006,20 @@ const adminStyles = `
 
   h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .hero p,
   .muted {
     color: #a9b4d0;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.7;
   }
 
   .hero p {
     max-width: 820px;
     margin: 0 0 20px;
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .hero-side-card {
@@ -4043,7 +4043,7 @@ const adminStyles = `
   .hero-side-card span {
     margin-bottom: 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -4111,7 +4111,7 @@ const adminStyles = `
     min-height: 46px;
     border-radius: 15px;
     padding: 12px 18px;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 900;
     cursor: pointer;
     transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.18s ease, background 0.18s ease;
@@ -4139,7 +4139,7 @@ const adminStyles = `
   .secondary-btn.small {
     min-height: 38px;
     padding: 9px 12px;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .status-grid,
@@ -4196,7 +4196,7 @@ const adminStyles = `
   .stat-card p {
     margin: 0 0 10px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -4212,7 +4212,7 @@ const adminStyles = `
   .stat-card span {
     display: block;
     color: #a9b4d0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.6;
   }
 
@@ -4225,7 +4225,7 @@ const adminStyles = `
   .message {
     padding: 14px 16px;
     border-radius: 18px;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.6;
   }
 
@@ -4381,7 +4381,7 @@ const adminStyles = `
   .api-card span {
     margin-bottom: 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -4390,7 +4390,7 @@ const adminStyles = `
   .api-card strong {
     margin-bottom: 8px;
     color: #ffffff;
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .api-card p {
@@ -4439,7 +4439,7 @@ const adminStyles = `
   .api-meta-grid b {
     margin-bottom: 5px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
@@ -4515,7 +4515,7 @@ const adminStyles = `
     display: block;
     margin-bottom: 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -4581,13 +4581,13 @@ const adminStyles = `
   .supervisor-suggestion span,
   .role-candidate-option span {
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .supervisor-suggestion em,
   .role-candidate-option em {
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
   }
 
@@ -4615,7 +4615,7 @@ const adminStyles = `
     margin: 0;
     color: #dbe7ff;
     letter-spacing: 0;
-    font-size: 14px;
+    font-size: 16px;
     text-transform: none;
   }
 
@@ -4691,14 +4691,14 @@ const adminStyles = `
 
   .mini-grid span {
     color: #dbe7ff;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.5;
   }
 
   .mini-grid b {
     display: block;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
@@ -4735,14 +4735,14 @@ const adminStyles = `
     color: #bbf7d0;
     border-radius: 999px;
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     cursor: pointer;
   }
 
   .selected-member-chip span {
     color: #fca5a5;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .member-option-list {
@@ -4809,7 +4809,7 @@ const adminStyles = `
   .member-copy em {
     margin-top: 4px;
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
   }
 
@@ -4869,7 +4869,7 @@ const adminStyles = `
     color: #dbe7ff;
     background: rgba(96, 165, 250, 0.1);
     border: 1px solid rgba(96, 165, 250, 0.18);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
   }
 
@@ -4949,7 +4949,7 @@ const adminStyles = `
   .profile-card em {
     margin-top: 6px;
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
   }
 
@@ -5007,7 +5007,7 @@ const adminStyles = `
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.04);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
   }
 
@@ -5057,7 +5057,7 @@ const adminStyles = `
     z-index: 2;
     color: #8ea0d6;
     background: rgba(10, 18, 34, 0.98);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -5090,7 +5090,7 @@ const adminStyles = `
   td em {
     margin-top: 8px;
     color: #8ea0d6;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.5;
     font-style: normal;
   }
@@ -5205,7 +5205,7 @@ const adminStyles = `
   .activity-summary-grid span {
     margin-bottom: 8px;
     color: #9fb4ff;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 950;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -5267,7 +5267,7 @@ const adminStyles = `
     display: block;
     margin-top: 6px;
     color: #93c5fd;
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
     font-weight: 800;
   }
@@ -5285,7 +5285,7 @@ const adminStyles = `
 
   .activity-log-pagination span {
     color: #b8c4e5;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 850;
   }
 
@@ -5341,12 +5341,12 @@ const adminStyles = `
 
   .session-card strong {
     color: #ffffff;
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .session-card span {
     color: #aebbe1;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.5;
   }
 
@@ -5359,7 +5359,7 @@ const adminStyles = `
 
   .session-card dt {
     color: #8ea0d6;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 950;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -5368,7 +5368,7 @@ const adminStyles = `
   .session-card dd {
     margin: 3px 0 0;
     color: #eef3ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
     line-height: 1.45;
   }
@@ -5386,7 +5386,7 @@ const adminStyles = `
     background: rgba(8, 13, 28, 0.92);
     color: #dbeafe;
     font: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     cursor: pointer;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
@@ -5412,7 +5412,7 @@ const adminStyles = `
     color: #c7d2fe;
     border: 1px solid rgba(96, 165, 250, 0.16);
     background: rgba(59, 130, 246, 0.07);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     cursor: help;
   }
@@ -5440,7 +5440,7 @@ const adminStyles = `
       radial-gradient(circle at top right, rgba(124, 58, 237, 0.16), transparent 36%),
       #0b1122;
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.46);
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
     line-height: 1.55;
     transition: opacity 0.16s ease, transform 0.16s ease;
