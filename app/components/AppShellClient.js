@@ -230,7 +230,7 @@ function canViewNavItem(item, profile) {
 function getLockReason(pathname, session, profile) {
   if (pathname === "/run" && !session?.user) {
     return {
-      title: "Sign in required",
+      title: "Sign In Required",
       message: "Please sign in with your NEXT Ventures account to visit Run Audit.",
     };
   }
@@ -245,14 +245,14 @@ function getLockReason(pathname, session, profile) {
 
   if (pathname === "/admin" && !session?.user) {
     return {
-      title: "Sign in required",
+      title: "Sign In Required",
       message: "Please sign in with your NEXT Ventures account to visit Admin.",
     };
   }
 
   if (pathname === "/admin" && !canAccessAdmin(profile)) {
     return {
-      title: "Admin access required",
+      title: "Admin Access Required",
       message:
         "Sorry, you do not have permission to visit this section. Please contact the Master Admin.",
     };
@@ -260,7 +260,7 @@ function getLockReason(pathname, session, profile) {
 
   if (pathname === "/results" && !session?.user) {
     return {
-      title: "Sign in required",
+      title: "Sign In Required",
       message: "Please sign in with your NEXT Ventures account to visit Results.",
     };
   }
@@ -340,13 +340,13 @@ function LoginScreen({ authMessage, onGoogleLogin }) {
           <div>
             <p>NEXT Ventures</p>
             <h1>AI Auditor & Insights Platform</h1>
-            <span>Secure Review Intelligence, Client Sentiment, And Resolution Tracking.</span>
+            <span>Secure review intelligence, client sentiment, and resolution tracking.</span>
           </div>
         </div>
 
         <div className="login-copy">
           <span>Secure Access Required</span>
-          <h2>Sign In To Enter The Command Center</h2>
+          <h2>Sign In to Enter the Command Center</h2>
           <p>
             Use your NEXT Ventures Google account to access the dashboard, results, audit workflow,
             and Admin controls assigned to your role.
@@ -361,7 +361,7 @@ function LoginScreen({ authMessage, onGoogleLogin }) {
               <path fill="#FBBC05" d="M6.41 13.9c-.2-.6-.31-1.24-.31-1.9s.11-1.3.31-1.9V7.51H3.06A9.98 9.98 0 0 0 2 12c0 1.61.39 3.14 1.06 4.49l3.35-2.59z" />
               <path fill="#EA4335" d="M12 5.98c1.47 0 2.79.51 3.82 1.5l2.87-2.87C16.95 2.99 14.69 2 12 2 8.08 2 4.71 4.25 3.06 7.51l3.35 2.59C7.2 7.74 9.4 5.98 12 5.98z" />
             </svg>
-            Sign In With Google
+            Sign In with Google
           </button>
 
           <small>Only nextventures.io accounts can continue.</small>
@@ -870,7 +870,7 @@ export default function AppShellClient({ children }) {
                         </div>
 
                         <div>
-                          <span>Run audit</span>
+                          <span>Run Audit</span>
                           <strong>{canRunAudits(profile) ? "Allowed" : "Locked"}</strong>
                         </div>
 
@@ -892,14 +892,14 @@ export default function AppShellClient({ children }) {
                       {authMessage ? <p className="profile-warning">{authMessage}</p> : null}
 
                       <button type="button" className="signout-btn" onClick={handleLogout}>
-                        Sign out
+                        Sign Out
                       </button>
                     </div>
                   ) : null}
                 </>
               ) : (
                 <button type="button" className="signin-btn" onClick={handleGoogleLogin}>
-                  Sign in
+                  Sign In
                 </button>
               )}
             </div>
@@ -912,13 +912,13 @@ export default function AppShellClient({ children }) {
               <div className="locked-overlay">
                 <div className="locked-card">
                   <div className="locked-orb" />
-                  <span>Restricted section</span>
+                  <span>Restricted Section</span>
                   <h2>{lockReason.title}</h2>
                   <p>{lockReason.message}</p>
 
                   {!session?.user ? (
                     <button type="button" className="signin-btn large" onClick={handleGoogleLogin}>
-                      Sign in with Google
+                      Sign In with Google
                     </button>
                   ) : (
                     <Link href="/" className="locked-link">
@@ -1094,7 +1094,7 @@ const appShellStyles = `
   .login-copy span {
     margin: 0;
     color: #93b4ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 950;
     letter-spacing: 0.18em;
     text-transform: uppercase;
@@ -1195,7 +1195,7 @@ const appShellStyles = `
     display: block;
     max-width: 520px;
     color: #aebbe1;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.6;
   }
 
@@ -1220,7 +1220,7 @@ const appShellStyles = `
   .login-copy p {
     margin: 0 0 22px;
     color: #aebbe1;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.7;
   }
 
@@ -1262,7 +1262,7 @@ const appShellStyles = `
     color: #fecaca;
     background: rgba(239, 68, 68, 0.12);
     border: 1px solid rgba(239, 68, 68, 0.2);
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.5;
   }
 
@@ -1409,7 +1409,7 @@ const appShellStyles = `
     color: #e9ddff;
     padding: 9px 14px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 850;
     letter-spacing: 0.12em;
   }
@@ -1524,7 +1524,7 @@ const appShellStyles = `
   .brand-subtitle {
     margin: 8px 0 0;
     max-width: 170px;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.45;
     color: #9caed3;
   }
@@ -1536,7 +1536,7 @@ const appShellStyles = `
 
   .nav-section-label {
     padding: 0 6px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 0.14em;
     color: #8296c4;
@@ -1563,7 +1563,7 @@ const appShellStyles = `
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.04),
       0 10px 24px rgba(2, 6, 23, 0.18);
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 800;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
   }
@@ -1593,7 +1593,7 @@ const appShellStyles = `
 
   .nav-link em {
     color: #fbbf24;
-    font-size: 10px;
+    font-size: 12px;
     font-style: normal;
     font-weight: 850;
   }
@@ -1613,7 +1613,7 @@ const appShellStyles = `
   .sidebar-mini span {
     display: block;
     color: #7f92bc;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 850;
     letter-spacing: 0.12em;
     margin-bottom: 8px;
@@ -1621,7 +1621,7 @@ const appShellStyles = `
 
   .sidebar-mini strong {
     color: #ffffff;
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .content-shell {
@@ -1654,7 +1654,7 @@ const appShellStyles = `
   }
 
   .topbar-kicker {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 850;
     letter-spacing: 0.12em;
     color: #7e92bd;
@@ -1710,7 +1710,7 @@ const appShellStyles = `
     overflow: hidden;
     border-radius: 15px;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
     box-shadow: 0 0 24px rgba(139,92,246,0.42);
@@ -1743,18 +1743,18 @@ const appShellStyles = `
   }
 
   .profile-copy strong {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .profile-copy small {
     margin-top: 3px;
     color: #a9b4d0;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .profile-button b {
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .profile-menu {
@@ -1804,21 +1804,21 @@ const appShellStyles = `
   .profile-detail-grid span {
     display: block;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 850;
     margin-bottom: 6px;
   }
 
   .profile-detail-grid strong {
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .profile-note,
   .profile-warning {
     margin: 0 0 12px;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.6;
   }
 
@@ -1836,7 +1836,7 @@ const appShellStyles = `
     padding: 0 16px;
     border-radius: 14px;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 850;
     background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
     box-shadow: 0 14px 30px rgba(91,33,182,0.32);
@@ -1864,7 +1864,7 @@ const appShellStyles = `
     color: #cbd5e1;
     border: 1px solid rgba(255,255,255,0.08);
     background: rgba(255,255,255,0.035);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
   }
 
@@ -1928,7 +1928,7 @@ const appShellStyles = `
 
   .locked-card span {
     color: #9fb2ee;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 850;
     letter-spacing: 0.14em;
   }
