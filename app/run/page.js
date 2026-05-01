@@ -2505,9 +2505,18 @@ export default function RunPage() {
   }
 
   async function handleFetchConversations() {
+    const restoreCandidateFetchData = fetchData;
+    const restoreCandidateWorkflowRun = workflowRun;
+    const restoreCandidateWorkflowRunId = workflowRunId;
+    const canResumeExistingFetch = Boolean(
+      restoreCandidateWorkflowRun?.id &&
+        restoreCandidateWorkflowRun?.status === "fetching" &&
+        restoreCandidateWorkflowRun?.safe_payload?.fetch_pagination?.fetchState
+    );
+
     setFetchError("");
     setFetchSuccess("");
-    setFetchData(null);
+    setFetchData(canResumeExistingFetch ? restoreCandidateFetchData : null);
     setRunData(null);
     setRunError("");
     setRunSuccess("");
@@ -2554,90 +2563,184 @@ export default function RunPage() {
     setFetchStepIndex(0);
     setOperationStatus("fetching");
 
-    addLog(`Fetch started for ${startDate} to ${endDate}.`, "info");
+    addLog(
+      canResumeExistingFetch
+        ? `Resuming paginated fetch for ${startDate} to ${endDate}.`
+        : `Paginated fetch started for ${startDate} to ${endDate}.`,
+      "info"
+    );
 
     let activeWorkflowRunId = "";
+    let fetchState = canResumeExistingFetch
+      ? restoreCandidateWorkflowRun?.safe_payload?.fetch_pagination?.fetchState || null
+      : null;
+    let accumulatedConversations = canResumeExistingFetch && Array.isArray(restoreCandidateFetchData?.conversations)
+      ? [...restoreCandidateFetchData.conversations]
+      : [];
+    let pageRound = 0;
 
     try {
-      const workflowStart = await postWorkflowAction(
-        "start_workflow",
-        {
-          startDate,
-          endDate,
-          limiterEnabled,
-          limitCount: limiterEnabled ? limitCount : null,
-          autoRunAfterFetch,
-          batchSize: AUDIT_BATCH_SIZE,
-          selectedDatePreset,
-          filters: {
+      if (canResumeExistingFetch) {
+        activeWorkflowRunId = restoreCandidateWorkflowRunId || restoreCandidateWorkflowRun?.id || "";
+        setWorkflowRunId(activeWorkflowRunId);
+      } else {
+        const workflowStart = await postWorkflowAction(
+          "start_workflow",
+          {
+            startDate,
+            endDate,
+            limiterEnabled,
+            limitCount: limiterEnabled ? limitCount : null,
+            autoRunAfterFetch,
+            batchSize: AUDIT_BATCH_SIZE,
+            selectedDatePreset,
+            filters: {
+              conversationRatings,
+              supervisorTeamIds: selectedSupervisorTeamIds,
+              employeeNames: selectedEmployeeNames,
+              intercomAgentNames: selectedIntercomAgentNames,
+              fetchMode: "paginated",
+            },
+          },
+          { quiet: false }
+        );
+
+        activeWorkflowRunId = workflowStart?.run?.id || "";
+        if (activeWorkflowRunId) {
+          setWorkflowRunId(activeWorkflowRunId);
+          addLog("Database-backed paginated workflow record created.", "success");
+        }
+      }
+
+      let done = false;
+      const maxClientPages = 400;
+
+      while (!done) {
+        if (cancelRequestedRef.current) {
+          const abortError = new Error("Fetch cancelled.");
+          abortError.name = "AbortError";
+          throw abortError;
+        }
+
+        pageRound += 1;
+        if (pageRound > maxClientPages) {
+          throw new Error("Paginated fetch stopped for safety after too many pages. Narrow the date range or filters and try again.");
+        }
+
+        const response = await fetch("/api/audits/fetch-page", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            startDate,
+            endDate,
+            limiterEnabled,
+            limitCount,
             conversationRatings,
             supervisorTeamIds: selectedSupervisorTeamIds,
             employeeNames: selectedEmployeeNames,
             intercomAgentNames: selectedIntercomAgentNames,
-          },
-        },
-        { quiet: false }
-      );
+            fetchState,
+            alreadyFetchedCount: accumulatedConversations.length,
+          }),
+          signal: controller.signal,
+          cache: "no-store",
+        });
 
-      activeWorkflowRunId = workflowStart?.run?.id || "";
-      if (activeWorkflowRunId) {
-        setWorkflowRunId(activeWorkflowRunId);
-        addLog("Database-backed workflow record created.", "success");
-      }
+        const pageData = await readJsonSafely(response);
 
-      const response = await fetch("/api/audits/fetch-conversations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          startDate,
-          endDate,
-          limiterEnabled,
-          limitCount,
-          conversationRatings,
-          supervisorTeamIds: selectedSupervisorTeamIds,
-          employeeNames: selectedEmployeeNames,
-          intercomAgentNames: selectedIntercomAgentNames,
-          debug: true,
-        }),
-        signal: controller.signal,
-      });
+        if (!response.ok || !pageData?.ok) {
+          throw new Error(pageData?.error || "Paginated conversation fetch failed.");
+        }
 
-      const data = await readJsonSafely(response);
+        const pageConversations = Array.isArray(pageData.conversations) ? pageData.conversations : [];
+        const knownIds = new Set(accumulatedConversations.map((item) => conversationIdOf(item)).filter(Boolean));
+        const newConversations = pageConversations.filter((item) => {
+          const id = conversationIdOf(item);
+          if (!id || knownIds.has(id)) return false;
+          knownIds.add(id);
+          return true;
+        });
 
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Conversation fetch failed.");
-      }
+        accumulatedConversations = [...accumulatedConversations, ...newConversations];
+        fetchState = pageData.fetchState || fetchState;
+        done = Boolean(pageData.done);
 
-      setFetchData(data);
-      setSelectedQueueIds([]);
-      setQueueExpanded(false);
-      setQueueSearchText("");
-      setFetchStepIndex(FETCH_STEPS.length - 1);
-
-      const fetchedCount = Number(data?.meta?.fetchedCount || 0);
-
-      if (activeWorkflowRunId) {
-        await postWorkflowAction(
-          "fetch_completed",
-          {
-            run_id: activeWorkflowRunId,
-            conversations: Array.isArray(data?.conversations) ? data.conversations : [],
+        const fetchedCount = accumulatedConversations.length;
+        const mergedFetchData = {
+          ok: true,
+          message: done
+            ? fetchedCount
+              ? "Paginated fetch completed."
+              : "Fetch completed with no conversations found."
+            : "Paginated fetch is still running.",
+          meta: {
+            ...(pageData.meta || {}),
+            startDate,
+            endDate,
             fetchedCount,
-            meta: data?.meta || {},
+            paginated: true,
+            done,
+            pageRound,
           },
-          { quiet: true }
+          conversations: accumulatedConversations,
+          debug: pageData.debug,
+        };
+
+        setFetchData(mergedFetchData);
+        setSelectedQueueIds([]);
+        setQueueSearchText("");
+        setFetchStepIndex(done ? FETCH_STEPS.length - 1 : Math.min(FETCH_STEPS.length - 2, 1));
+        setFetchSuccess(
+          done
+            ? `${formatNumber(fetchedCount)} filtered conversation(s) fetched.`
+            : `${formatNumber(fetchedCount)} conversation(s) fetched so far. Still paging through Intercom...`
         );
+
+        if (activeWorkflowRunId) {
+          await postWorkflowAction(
+            "fetch_page_saved",
+            {
+              run_id: activeWorkflowRunId,
+              conversations: newConversations,
+              fetchedCount,
+              done,
+              fetchState,
+              meta: mergedFetchData.meta,
+            },
+            { quiet: true }
+          );
+        }
+
+        const pageCount = Number(pageData?.meta?.processedPagesTotal || pageRound || 0);
+        if (newConversations.length || done || pageRound % 5 === 0) {
+          addLog(
+            done
+              ? `Paginated fetch completed with ${formatNumber(fetchedCount)} conversation(s).`
+              : `Fetch page ${formatNumber(pageCount)} saved. ${formatNumber(fetchedCount)} conversation(s) found so far.`,
+            newConversations.length ? "success" : "notice"
+          );
+        }
+
+        if (limiterEnabled && fetchedCount >= Number(limitCount || 0)) {
+          done = true;
+        }
+
+        if (!done) {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        }
       }
+
+      const fetchedCount = accumulatedConversations.length;
 
       if (fetchedCount > 0) {
         setFetchSuccess(`${formatNumber(fetchedCount)} filtered conversation(s) fetched.`);
         setOperationStatus("fetched");
-        addLog(`${formatNumber(fetchedCount)} conversation(s) fetched.`, "success");
+        addLog(`${formatNumber(fetchedCount)} conversation(s) fetched and saved to the audit queue.`, "success");
       } else {
-        setFetchSuccess(data?.message || "Fetch completed with no conversations found.");
+        setFetchSuccess("Fetch completed with no conversations found.");
         setOperationStatus("completed");
         addLog("Fetch completed with no conversations found.", "neutral");
       }
@@ -2646,9 +2749,9 @@ export default function RunPage() {
       fetchAbortRef.current = null;
 
       if (autoRunAfterFetch && fetchedCount > 0) {
-        addLog("Auto-run enabled. Starting batch audit automatically.", "success");
+        addLog("Auto-run enabled. Starting batch audit automatically after paginated fetch.", "success");
         await startBatchAudit({
-          conversationsOverride: Array.isArray(data?.conversations) ? data.conversations : [],
+          conversationsOverride: accumulatedConversations,
           duplicateMode: "",
           autoTriggered: true,
           workflowRunIdOverride: activeWorkflowRunId,
@@ -2660,7 +2763,7 @@ export default function RunPage() {
         addLog("Fetch request was aborted.", "warning");
         setOperationStatus("cancelled");
       } else {
-        const message = error instanceof Error ? error.message : "Conversation fetch failed.";
+        const message = error instanceof Error ? error.message : "Paginated conversation fetch failed.";
         setFetchError(message);
         addLog(message, "danger");
         setOperationStatus("failed");
@@ -2671,9 +2774,9 @@ export default function RunPage() {
           error?.name === "AbortError" ? "workflow_cancelled" : "workflow_failed",
           {
             run_id: activeWorkflowRunId,
-            message: error?.name === "AbortError" ? "Fetch cancelled." : error instanceof Error ? error.message : "Conversation fetch failed.",
-            error: error instanceof Error ? error.message : "Conversation fetch failed.",
-            metadata: { stage: "fetch" },
+            message: error?.name === "AbortError" ? "Fetch cancelled." : error instanceof Error ? error.message : "Paginated conversation fetch failed.",
+            error: error instanceof Error ? error.message : "Paginated conversation fetch failed.",
+            metadata: { stage: "paginated_fetch", fetchState },
           },
           { quiet: true }
         );
@@ -2683,6 +2786,7 @@ export default function RunPage() {
       fetchAbortRef.current = null;
     }
   }
+
 
   async function handleRunAudit() {
     await startBatchAudit({ duplicateMode: "", autoTriggered: false });
