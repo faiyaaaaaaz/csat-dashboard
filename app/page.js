@@ -2086,7 +2086,7 @@ function WeeklyAgentTable({
             <h2>Agent Performance By Timeframe</h2>
             <InfoTip text="This table breaks the selected date range into Daily, Weekly, Monthly, or Yearly columns. Weekly is the default. The default filters remain Review = Missed Opportunity and Client = Very Positive so the table starts with a focused missed-opportunity view." />
           </div>
-          <span>Click An Employee Or Any Timeframe Cell To Open The Underlying Conversations.</span>
+          <span>Click an employee or any timeframe cell to open the underlying conversations.</span>
         </div>
 
         <div className="weekly-controls">
@@ -2232,26 +2232,14 @@ function DashboardLoadingScreen({ welcomeIdentity = null, showWelcome = false })
         <div className="dashboard-loader-card">
           <div className="dashboard-loader-logo" aria-hidden="true">
             <span className="dashboard-loader-halo" />
-            <span className="dashboard-loader-orbit orbit-a" />
-            <span className="dashboard-loader-orbit orbit-b" />
-            <span className="dashboard-loader-dot dot-a" />
-            <span className="dashboard-loader-dot dot-b" />
-            <span className="dashboard-loader-dot dot-c" />
-            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 12L34 12L26 29L40 29L18 52L25 36L13 36L16 12Z" fill="url(#dashboardLoaderMain)" />
-              <path d="M34 14L50 14L40 28L51 28L35 47L39 34L30 34L34 14Z" fill="url(#dashboardLoaderAccent)" opacity="0.94" />
-              <defs>
-                <linearGradient id="dashboardLoaderMain" x1="13" y1="12" x2="44" y2="50" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#22D3EE" />
-                  <stop offset="0.48" stopColor="#8B5CF6" />
-                  <stop offset="1" stopColor="#EC4899" />
-                </linearGradient>
-                <linearGradient id="dashboardLoaderAccent" x1="30" y1="14" x2="52" y2="44" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#FDE047" />
-                  <stop offset="1" stopColor="#F97316" />
-                </linearGradient>
-              </defs>
-            </svg>
+            <span className="dashboard-loader-link link-a" />
+            <span className="dashboard-loader-link link-b" />
+            <span className="dashboard-loader-node node-a" />
+            <span className="dashboard-loader-node node-b" />
+            <span className="dashboard-loader-node node-c" />
+            <span className="dashboard-loader-gear gear-a">⚙</span>
+            <span className="dashboard-loader-gear gear-b">⚙</span>
+            <span className="dashboard-loader-gear gear-c">⚙</span>
           </div>
 
           <p>Dashboard Intelligence</p>
@@ -2689,8 +2677,8 @@ export default function DashboardPage() {
         {loading ? (
           <section className="panel loading-panel">
             <p className="panel-eyebrow">Loading</p>
-            <h2>Preparing The Intelligence View...</h2>
-            <p className="muted">Reading Stored Audit Results And Supervisor Teams From Supabase.</p>
+            <h2>Preparing the Intelligence View...</h2>
+            <p className="muted">Reading stored audit results and Supervisor Teams from Supabase.</p>
           </section>
         ) : error ? (
           <section className="panel">
@@ -3178,91 +3166,123 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-logo {
-    width: 104px;
-    height: 104px;
-    display: grid;
+    width: 146px;
+    height: 146px;
+    display: block;
     place-items: center;
-    border-radius: 36px;
-    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 42px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
     background:
       radial-gradient(circle at 28% 22%, rgba(255,255,255,0.24), transparent 22%),
       linear-gradient(145deg, rgba(5, 12, 31, 0.98), rgba(15, 23, 42, 0.94));
     box-shadow:
-      0 24px 60px rgba(18, 31, 67, 0.44),
-      0 0 46px rgba(34, 211, 238, 0.16),
+      0 28px 72px rgba(18, 31, 67, 0.48),
+      0 0 52px rgba(34, 211, 238, 0.18),
       inset 0 1px 0 rgba(255,255,255,0.12);
   }
 
-  .dashboard-loader-logo svg {
-    position: relative;
-    z-index: 2;
-    width: 56px;
-    height: 56px;
-    filter: drop-shadow(0 0 18px rgba(139, 92, 246, 0.46));
-  }
-
   .dashboard-loader-halo,
-  .dashboard-loader-orbit,
-  .dashboard-loader-dot {
+  .dashboard-loader-link,
+  .dashboard-loader-node,
+  .dashboard-loader-gear {
     position: absolute;
     pointer-events: none;
   }
 
   .dashboard-loader-halo {
-    inset: 11px;
-    border-radius: 30px;
-    background: radial-gradient(circle at center, rgba(34, 211, 238, 0.15), rgba(139, 92, 246, 0.11), transparent 70%);
-    filter: blur(8px);
+    inset: 12px;
+    border-radius: 34px;
+    background: radial-gradient(circle at center, rgba(34, 211, 238, 0.16), rgba(139, 92, 246, 0.12), transparent 72%);
+    filter: blur(10px);
   }
 
-  .dashboard-loader-orbit {
-    border: 1px solid rgba(191, 219, 254, 0.32);
+  .dashboard-loader-link {
+    height: 4px;
     border-radius: 999px;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.78), rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.82));
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.34);
+    transform-origin: center;
   }
 
-  .dashboard-loader-orbit.orbit-a {
-    width: 78px;
-    height: 36px;
-    transform: rotate(-24deg);
-    animation: dashboardOrbitA 4.7s ease-in-out infinite;
+  .dashboard-loader-link.link-a {
+    left: 38px;
+    top: 53px;
+    width: 70px;
+    transform: rotate(10deg);
   }
 
-  .dashboard-loader-orbit.orbit-b {
-    width: 36px;
-    height: 78px;
-    transform: rotate(28deg);
-    animation: dashboardOrbitB 5.2s ease-in-out infinite;
+  .dashboard-loader-link.link-b {
+    left: 58px;
+    top: 82px;
+    width: 54px;
+    transform: rotate(-38deg);
   }
 
-  .dashboard-loader-dot {
-    width: 7px;
-    height: 7px;
+  .dashboard-loader-node {
+    width: 9px;
+    height: 9px;
     border-radius: 999px;
-    background: #cffafe;
-    box-shadow: 0 0 16px rgba(34, 211, 238, 0.9);
+    background: #dbeafe;
+    box-shadow: 0 0 18px rgba(191, 219, 254, 0.74);
   }
 
-  .dashboard-loader-dot.dot-a {
-    top: 20px;
-    right: 24px;
+  .dashboard-loader-node.node-a {
+    left: 42px;
+    top: 50px;
   }
 
-  .dashboard-loader-dot.dot-b {
-    left: 24px;
-    bottom: 28px;
+  .dashboard-loader-node.node-b {
+    left: 102px;
+    top: 61px;
+    background: #c4b5fd;
+    box-shadow: 0 0 18px rgba(196, 181, 253, 0.8);
   }
 
-  .dashboard-loader-dot.dot-c {
-    right: 24px;
-    bottom: 24px;
-    background: #f0abfc;
-    box-shadow: 0 0 16px rgba(217, 70, 239, 0.8);
+  .dashboard-loader-node.node-c {
+    left: 100px;
+    top: 101px;
+    background: #f9a8d4;
+    box-shadow: 0 0 18px rgba(249, 168, 212, 0.8);
+  }
+
+  .dashboard-loader-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1;
+    text-shadow: 0 12px 28px rgba(0, 0, 0, 0.48);
+    filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.18));
+  }
+
+  .dashboard-loader-gear.gear-a {
+    left: 18px;
+    top: 22px;
+    font-size: 72px;
+    color: #dbeafe;
+    animation: dashboardGearSpin 4.8s linear infinite;
+  }
+
+  .dashboard-loader-gear.gear-b {
+    left: 72px;
+    top: 37px;
+    font-size: 54px;
+    color: #c4b5fd;
+    animation: dashboardGearSpinReverse 4s linear infinite;
+  }
+
+  .dashboard-loader-gear.gear-c {
+    left: 76px;
+    top: 82px;
+    font-size: 42px;
+    color: #f9a8d4;
+    animation: dashboardGearSpin 3.4s linear infinite;
   }
 
   .dashboard-loader-card p {
     margin: 14px 0 0;
     color: #93b4ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 950;
     letter-spacing: 0.18em;
     text-transform: uppercase;
@@ -3279,7 +3299,7 @@ const dashboardStyles = `
   .dashboard-loader-card span {
     max-width: 460px;
     color: #aebbe1;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.7;
   }
 
@@ -3322,7 +3342,7 @@ const dashboardStyles = `
 
   .dashboard-welcome-avatar strong {
     color: #ffffff;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 950;
     letter-spacing: 0.04em;
   }
@@ -3338,7 +3358,7 @@ const dashboardStyles = `
     max-width: none;
     margin: 0;
     color: #ffffff;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 900;
     line-height: 1.25;
     letter-spacing: -0.02em;
@@ -3347,7 +3367,7 @@ const dashboardStyles = `
   .dashboard-welcome-copy strong {
     margin-top: 4px;
     color: #93c5fd;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -3452,7 +3472,7 @@ const dashboardStyles = `
   .panel-eyebrow {
     margin: 0 0 10px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -3478,7 +3498,7 @@ const dashboardStyles = `
   .section-title-row span,
   .muted {
     color: #a9b4d0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.7;
   }
 
@@ -3502,7 +3522,7 @@ const dashboardStyles = `
   .hero-command-card > div:first-child span {
     margin: 0 0 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -3531,7 +3551,7 @@ const dashboardStyles = `
     color: #a9b4d0;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.035);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
   }
 
@@ -3562,7 +3582,7 @@ const dashboardStyles = `
     min-height: 42px;
     padding: 0 16px;
     border-radius: 14px;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     cursor: pointer;
     text-decoration: none;
@@ -3650,7 +3670,7 @@ const dashboardStyles = `
     display: block;
     margin-bottom: 7px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -3689,7 +3709,7 @@ const dashboardStyles = `
     align-items: center;
     gap: 8px;
     color: #dbe7ff;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 900;
     padding-bottom: 10px;
     white-space: nowrap;
@@ -3732,7 +3752,7 @@ const dashboardStyles = `
   .date-picker-button b,
   .multi-button b {
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .date-picker-popover,
@@ -3803,7 +3823,7 @@ const dashboardStyles = `
 
   .multi-option span {
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
   }
 
@@ -3830,7 +3850,7 @@ const dashboardStyles = `
     border: 1px dashed rgba(255, 255, 255, 0.12);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.025);
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .date-preset-list {
@@ -3865,7 +3885,7 @@ const dashboardStyles = `
 
   .date-preset-list b {
     color: #f97316;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .custom-range-panel {
@@ -3879,7 +3899,7 @@ const dashboardStyles = `
     display: block;
     margin-bottom: 18px;
     color: #ffffff;
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .custom-range-grid {
@@ -3921,7 +3941,7 @@ const dashboardStyles = `
   .insight-strip span {
     margin-bottom: 8px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -3987,7 +4007,7 @@ const dashboardStyles = `
 
   .kpi-card span {
     color: #c4d0ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -4010,7 +4030,7 @@ const dashboardStyles = `
 
   .kpi-card small {
     color: #d6ddff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
   }
 
@@ -4020,7 +4040,7 @@ const dashboardStyles = `
     min-height: 24px;
     padding: 0 9px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 14px;
     font-style: normal;
     font-weight: 950;
     white-space: nowrap;
@@ -4118,7 +4138,7 @@ const dashboardStyles = `
     border: 1px solid rgba(125, 211, 252, 0.48);
     background: rgba(14, 165, 233, 0.16);
     box-shadow: 0 0 18px rgba(56, 189, 248, 0.18);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 950;
     line-height: 1;
     cursor: help;
@@ -4140,7 +4160,7 @@ const dashboardStyles = `
       radial-gradient(circle at top right, rgba(124, 58, 237, 0.18), transparent 35%),
       #070b18;
     box-shadow: 0 26px 70px rgba(0, 0, 0, 0.68);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
     line-height: 1.55;
     letter-spacing: 0;
@@ -4167,7 +4187,7 @@ const dashboardStyles = `
   .chart-head p {
     margin: 0;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .chart-card .card-action {
@@ -4207,14 +4227,14 @@ const dashboardStyles = `
 
   .chart-hover-card strong {
     color: #ffffff;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.35;
   }
 
   .chart-hover-card small {
     margin-top: 4px;
     color: #dbeafe;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
   }
 
@@ -4265,7 +4285,7 @@ const dashboardStyles = `
 
   .bar-line span {
     color: #cdd7ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     white-space: nowrap;
   }
@@ -4366,7 +4386,7 @@ const dashboardStyles = `
   .donut-hole span {
     display: block;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -4415,7 +4435,7 @@ const dashboardStyles = `
 
   .donut-legend span {
     color: #cdd7ff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 900;
     white-space: nowrap;
     padding-left: 10px;
@@ -4455,7 +4475,7 @@ const dashboardStyles = `
 
   .mini-rank-card h3 {
     margin: 0 0 4px;
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .mini-rank-card button {
@@ -4516,7 +4536,7 @@ const dashboardStyles = `
     color: #8ea0d6;
     background: rgba(10, 18, 34, 0.96);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -4566,7 +4586,7 @@ const dashboardStyles = `
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.03);
     font-weight: 900;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .text-link {
@@ -4776,7 +4796,7 @@ const dashboardStyles = `
     background: rgba(8, 13, 28, 0.92);
     color: #dbeafe;
     font: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     cursor: pointer;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
@@ -5012,7 +5032,7 @@ const dashboardStyles = `
     border: 1px solid rgba(125, 211, 252, 0.62);
     background: rgba(14, 165, 233, 0.22);
     box-shadow: 0 0 18px rgba(56, 189, 248, 0.26);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 950;
     letter-spacing: 0;
     line-height: 1;
@@ -5068,7 +5088,7 @@ const dashboardStyles = `
 
   .slim-hero .hero-copy p {
     margin: 0 0 6px;
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 0.15em;
   }
 
@@ -5080,7 +5100,7 @@ const dashboardStyles = `
   }
 
   .slim-hero .hero-copy span {
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.45;
   }
 
@@ -5135,7 +5155,7 @@ const dashboardStyles = `
   .current-view-head p {
     margin: 0 0 10px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -5153,7 +5173,7 @@ const dashboardStyles = `
   .current-view-head span {
     display: block;
     color: #a9b4d0;
-    font-size: 13px;
+    font-size: 15px;
     line-height: 1.55;
   }
 
@@ -5175,7 +5195,7 @@ const dashboardStyles = `
     display: block;
     margin: 0 0 6px;
     color: #98a7d0;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -5224,7 +5244,7 @@ const dashboardStyles = `
     content: "?";
     display: block;
     color: #dff7ff;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 950;
     line-height: 1;
     transform: translateY(-0.25px);
@@ -5297,7 +5317,7 @@ const dashboardStyles = `
   }
 
   .current-view-compact-card .current-view-head span {
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .compact-current-stats {
@@ -5447,7 +5467,7 @@ const dashboardStyles = `
     margin: 0 !important;
     padding: 0 !important;
     color: #dff7ff !important;
-    font-size: 10px !important;
+    font-size: 12px !important;
     font-weight: 950 !important;
     line-height: 1 !important;
     letter-spacing: 0 !important;
@@ -5516,7 +5536,7 @@ const dashboardStyles = `
     display: block;
     margin-bottom: 6px;
     color: #8ea0d6;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -5525,7 +5545,7 @@ const dashboardStyles = `
   .calendar-panel-head > div:first-child strong {
     display: block;
     color: #ffffff;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 950;
     letter-spacing: -0.03em;
   }
@@ -5555,7 +5575,7 @@ const dashboardStyles = `
 
   .range-field-tabs strong {
     color: #ffffff;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 950;
   }
 
@@ -5569,7 +5589,7 @@ const dashboardStyles = `
 
   .calendar-toolbar span {
     color: #f8fbff;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 950;
     text-align: center;
     letter-spacing: -0.02em;
@@ -5607,7 +5627,7 @@ const dashboardStyles = `
   .calendar-month h4 {
     margin: 0 0 12px;
     color: #ffffff;
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 950;
     text-align: center;
     letter-spacing: -0.02em;
@@ -5626,7 +5646,7 @@ const dashboardStyles = `
     min-height: 26px;
     margin: 0;
     color: #9aa8c7;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 950;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -5641,7 +5661,7 @@ const dashboardStyles = `
     border-radius: 10px;
     color: #e5edff;
     background: transparent;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 850;
     cursor: pointer;
   }
@@ -5681,6 +5701,17 @@ const dashboardStyles = `
     min-height: 44px;
   }
 
+  @keyframes dashboardGearSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes dashboardGearSpinReverse {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+  }
+
+
   @media (max-width: 900px) {
     .upgraded-date-popover {
       grid-template-columns: 1fr !important;
@@ -5694,30 +5725,30 @@ const dashboardStyles = `
 
 
   .conversation-action-buttons { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
-  .mini-preview-btn, .mini-open-link { min-height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(15, 23, 42, 0.86); color: #e7ecff; font-size: 11px; font-weight: 900; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .mini-preview-btn, .mini-open-link { min-height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(15, 23, 42, 0.86); color: #e7ecff; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; white-space: nowrap; }
   .mini-preview-btn:hover, .mini-open-link:hover { border-color: rgba(34, 211, 238, 0.45); background: rgba(14, 165, 233, 0.16); }
-  .preview-unavailable { color: #8ea0d6; font-size: 11px; font-weight: 800; }
+  .preview-unavailable { color: #8ea0d6; font-size: 13px; font-weight: 800; }
   .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2, 6, 23, 0.76); backdrop-filter: blur(16px); }
   .conversation-preview-modal { width: min(980px, 96vw); max-height: min(86vh, 860px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 28px; background: linear-gradient(180deg, #10172b 0%, #050917 100%); box-shadow: 0 34px 120px rgba(0, 0, 0, 0.76), 0 0 0 1px rgba(96, 165, 250, 0.08); }
   .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
-  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
+  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
   .conversation-preview-head h2 { margin: 0 0 6px; color: #ffffff; font-size: 26px; letter-spacing: -0.04em; }
-  .conversation-preview-head span { color: #a9b4d0; font-size: 13px; font-weight: 750; }
+  .conversation-preview-head span { color: #a9b4d0; font-size: 15px; font-weight: 750; }
   .conversation-preview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
   .conversation-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
   .conversation-preview-meta div { min-height: 62px; padding: 12px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.1); background: rgba(255, 255, 255, 0.035); }
   .conversation-preview-meta span, .conversation-preview-meta strong { display: block; }
-  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 10px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; }
-  .conversation-preview-meta strong { color: #f8fbff; font-size: 13px; line-height: 1.35; }
+  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; }
+  .conversation-preview-meta strong { color: #f8fbff; font-size: 15px; line-height: 1.35; }
   .conversation-transcript-list { overflow: auto; padding: 20px 24px 24px; display: grid; gap: 12px; }
   .conversation-message { max-width: 82%; padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.12); background: rgba(15, 23, 42, 0.82); }
   .conversation-message.client { justify-self: start; border-color: rgba(59, 130, 246, 0.18); background: rgba(30, 64, 175, 0.18); }
   .conversation-message.agent { justify-self: end; border-color: rgba(16, 185, 129, 0.18); background: rgba(6, 78, 59, 0.18); }
   .conversation-message.system { justify-self: center; max-width: 92%; background: rgba(255, 255, 255, 0.045); }
   .conversation-message-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  .conversation-message-top strong { color: #f8fbff; font-size: 13px; }
-  .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 11px; font-weight: 800; }
-  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 13px; }
+  .conversation-message-top strong { color: #f8fbff; font-size: 15px; }
+  .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 13px; font-weight: 800; }
+  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
   .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 24px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148, 163, 184, 0.18); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
   .conversation-preview-error strong, .conversation-preview-error span, .conversation-preview-error small { display: block; }
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
