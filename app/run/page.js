@@ -2655,6 +2655,52 @@ export default function RunPage() {
         </div>
       </section>
 
+      <section className="surface-card quick-run-panel">
+        <div className="quick-run-copy">
+          <span className="mini-label">Quick Actions</span>
+          <strong>{queuedConversationCount ? `${formatNumber(queuedConversationCount)} Ready For Audit` : "Ready To Fetch"}</strong>
+          <small>{startDate && endDate ? `${startDate} to ${endDate}` : "Choose an audit range first"} · {selectedFilterSummary.conversationRatings} · {selectedFilterSummary.employees}</small>
+        </div>
+
+        <div className="quick-run-metrics">
+          <div><span>Fetched</span><strong>{formatNumber(fetchedConversations.length)}</strong></div>
+          <div><span>Queued</span><strong>{formatNumber(queuedConversationCount)}</strong></div>
+          <div><span>Saved</span><strong>{formatNumber(runData?.meta?.auditedCount || 0)}</strong></div>
+        </div>
+
+        <div className="quick-run-actions">
+          {!fetchLoading ? (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={handleFetchConversations}
+              disabled={!canRunTests || !session?.user || !startDate || !endDate || runLoading}
+            >
+              Fetch Conversations
+            </button>
+          ) : (
+            <button type="button" className="danger-btn" onClick={handleCancelFetch}>
+              Cancel Fetch
+            </button>
+          )}
+
+          {!runLoading ? (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={handleRunAudit}
+              disabled={fetchLoading || !fetchedConversations.length}
+            >
+              Run Audit
+            </button>
+          ) : (
+            <button type="button" className="danger-btn" onClick={handleCancelAudit}>
+              Cancel Audit
+            </button>
+          )}
+        </div>
+      </section>
+
       <section className="command-grid">
         <div className="surface-card command-card">
           <div className="section-head">
@@ -3261,7 +3307,8 @@ export default function RunPage() {
 const runStyles = `
   .run-page {
     min-height: 100vh;
-    padding: 22px 18px 72px;
+    width: 100%;
+    padding: 18px clamp(14px, 1.8vw, 28px) 72px;
     color: #f5f7ff;
     background:
       radial-gradient(circle at 10% 0%, rgba(59, 130, 246, 0.14), transparent 24%),
@@ -3275,10 +3322,13 @@ const runStyles = `
   .stats-grid,
   .command-grid,
   .surface-card,
-  .diagnostics-panel {
-    max-width: 1440px;
-    margin-left: auto;
-    margin-right: auto;
+  .diagnostics-panel,
+  .quick-run-panel {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
   }
 
   .surface-card,
@@ -3687,9 +3737,10 @@ const runStyles = `
 
   .command-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(430px, 0.9fr);
+    grid-template-columns: minmax(700px, 1.14fr) minmax(430px, 0.86fr);
     gap: 18px;
     margin-bottom: 18px;
+    align-items: start;
   }
 
   .command-card,
@@ -3804,11 +3855,33 @@ const runStyles = `
 
   .control-section-grid {
     display: grid;
-    gap: 16px;
+    grid-template-columns: minmax(280px, 0.78fr) minmax(440px, 1.22fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .control-section-grid > .control-block:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .control-section-grid > .filter-control-block {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  .control-section-grid > .control-block:nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .control-section-grid > .action-block {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .control-block {
-    padding: 18px;
+    padding: 16px;
     overflow: visible;
   }
 
@@ -3964,14 +4037,14 @@ const runStyles = `
 
   .behavior-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    grid-template-columns: 1fr;
+    gap: 12px;
     align-items: stretch;
   }
 
   .behavior-card {
-    padding: 16px;
-    min-height: 156px;
+    padding: 14px;
+    min-height: 122px;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -4051,9 +4124,13 @@ const runStyles = `
 
   .action-summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .action-summary-grid div:nth-child(3) {
+    grid-column: 1 / -1;
   }
 
   .action-summary-grid div {
@@ -4674,9 +4751,8 @@ const runStyles = `
   }
 
   .run-intro-strip {
-    max-width: 1440px;
-    margin: 0 auto 18px;
-    padding: 18px 22px;
+    margin: 0 0 12px;
+    padding: 14px 18px;
     border-radius: 28px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -4686,10 +4762,10 @@ const runStyles = `
   }
 
   .run-intro-strip h1 {
-    font-size: clamp(28px, 3vw, 42px);
+    font-size: clamp(24px, 2.4vw, 34px);
     letter-spacing: -0.05em;
     line-height: 1.04;
-    margin: 0 0 8px;
+    margin: 0 0 6px;
   }
 
   .run-intro-strip p {
@@ -5212,11 +5288,101 @@ const runStyles = `
     z-index: 8000;
   }
 
+  .quick-run-panel {
+    margin: 0 0 14px;
+    padding: 14px 16px;
+    border-radius: 24px;
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 0.8fr) auto;
+    align-items: center;
+    gap: 14px;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.08), transparent 32%),
+      linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(12, 16, 34, 0.98));
+  }
+
+  .quick-run-copy strong,
+  .quick-run-copy small {
+    display: block;
+  }
+
+  .quick-run-copy strong {
+    color: #ffffff;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+  }
+
+  .quick-run-copy small {
+    margin-top: 5px;
+    color: #a9b4d0;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.45;
+  }
+
+  .quick-run-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .quick-run-metrics div {
+    min-height: 58px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .quick-run-metrics span,
+  .quick-run-metrics strong {
+    display: block;
+  }
+
+  .quick-run-metrics span {
+    color: #8ea0d6;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .quick-run-metrics strong {
+    color: #ffffff;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .quick-run-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .quick-run-actions .primary-btn,
+  .quick-run-actions .secondary-btn,
+  .quick-run-actions .danger-btn {
+    min-height: 44px;
+  }
+
   @media (max-width: 1280px) {
     .hero-grid,
     .command-grid,
-    .run-intro-strip {
+    .run-intro-strip,
+    .quick-run-panel,
+    .control-section-grid {
       grid-template-columns: 1fr;
+    }
+
+    .control-section-grid > .control-block,
+    .control-section-grid > .filter-control-block,
+    .control-section-grid > .action-block {
+      grid-column: auto;
+      grid-row: auto;
     }
 
     .hero-side-column,
