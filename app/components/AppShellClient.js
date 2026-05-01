@@ -313,7 +313,6 @@ function LaunchScreen({ title = "Initializing Secure Workspace...", subtitle = "
       <div className="auth-bg-grid" />
       <div className="launch-card compact-launch">
         <PlatformLogo size="large" />
-        <p>NEXT Ventures</p>
         <h1>{title}</h1>
         <span>{subtitle}</span>
         <div className="launch-progress">
