@@ -2108,6 +2108,13 @@ export default function ResultsPage() {
         </button>
       ) : null}
 
+      {previewConversationId ? (
+        <ConversationPreviewModal
+          conversationId={previewConversationId}
+          onClose={() => setPreviewConversationId("")}
+        />
+      ) : null}
+
       {showImportModal ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="import-modal">
