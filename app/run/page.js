@@ -865,9 +865,11 @@ export default function RunPage() {
   const [autoRunAfterFetch, setAutoRunAfterFetch] = useState(false);
 
   const [conversationRatings, setConversationRatings] = useState(DEFAULT_CONVERSATION_RATINGS);
+  const [selectedSupervisorTeamIds, setSelectedSupervisorTeamIds] = useState([]);
   const [selectedEmployeeNames, setSelectedEmployeeNames] = useState([]);
   const [selectedIntercomAgentNames, setSelectedIntercomAgentNames] = useState([]);
   const [agentMappings, setAgentMappings] = useState([]);
+  const [supervisorTeams, setSupervisorTeams] = useState([]);
   const [mappingFilterError, setMappingFilterError] = useState("");
   const [mappingFilterLoading, setMappingFilterLoading] = useState(false);
 
@@ -957,6 +959,39 @@ export default function RunPage() {
     [agentMappings]
   );
 
+  const activeSupervisorTeams = useMemo(
+    () =>
+      (Array.isArray(supervisorTeams) ? supervisorTeams : [])
+        .filter((team) => team?.is_active !== false)
+        .map((team) => ({
+          id: normalizeRunText(team.id),
+          supervisor_name: normalizeRunText(team.supervisor_name || team.supervisor_email || "Unnamed Supervisor"),
+          supervisor_email: normalizeRunText(team.supervisor_email),
+          members: Array.isArray(team.members)
+            ? team.members
+                .filter((member) => member?.is_active !== false)
+                .map((member) => ({
+                  employee_name: normalizeRunText(member.employee_name),
+                  employee_email: normalizeRunText(member.employee_email),
+                  intercom_agent_name: normalizeRunText(member.intercom_agent_name),
+                  team_name: normalizeRunText(member.team_name),
+                }))
+            : [],
+        }))
+        .filter((team) => team.id && team.supervisor_name),
+    [supervisorTeams]
+  );
+
+  const supervisorTeamFilterOptions = useMemo(
+    () =>
+      activeSupervisorTeams.map((team) => ({
+        value: team.id,
+        label: team.supervisor_name,
+        helper: `${team.members.length} Team Member(s)`,
+      })),
+    [activeSupervisorTeams]
+  );
+
   const employeeFilterOptions = useMemo(
     () =>
       toOptionList(activeAgentMappings.map((item) => item.employee_name)).map((option) => {
@@ -981,10 +1016,13 @@ export default function RunPage() {
   const selectedFilterSummary = useMemo(
     () => ({
       conversationRatings: describeSelection(conversationRatings, "Any Rating"),
+      supervisorTeams: selectedSupervisorTeamIds.length
+        ? `${selectedSupervisorTeamIds.length} Supervisor Team(s)`
+        : "All Supervisor Teams",
       employees: selectedEmployeeNames.length ? `${selectedEmployeeNames.length} Employee(s)` : "All Employees",
       agents: selectedIntercomAgentNames.length ? `${selectedIntercomAgentNames.length} Intercom Agent(s)` : "All Intercom Agents",
     }),
-    [conversationRatings, selectedEmployeeNames, selectedIntercomAgentNames]
+    [conversationRatings, selectedSupervisorTeamIds, selectedEmployeeNames, selectedIntercomAgentNames]
   );
   const queuedConversationCount = useMemo(
     () => getQueuedConversations(fetchedConversations).length,
@@ -1344,16 +1382,63 @@ export default function RunPage() {
       const data = await readJsonSafely(response);
       if (!response.ok || !data?.ok) throw new Error(data?.error || "Could not load agent mappings.");
       setAgentMappings(Array.isArray(data.mappings) ? data.mappings : []);
+      setSupervisorTeams(Array.isArray(data.supervisorTeams) ? data.supervisorTeams : []);
     } catch (error) {
       setMappingFilterError(error instanceof Error ? error.message : "Could not load employee mappings.");
       setAgentMappings([]);
+      setSupervisorTeams([]);
     } finally {
       setMappingFilterLoading(false);
     }
   }
 
+  function getEmployeesAndAgentsForSupervisorTeams(nextTeamIds) {
+    const selectedTeamIds = new Set(uniqueSortedText(nextTeamIds));
+    const employeeNames = [];
+    const intercomAgentNames = [];
+
+    for (const team of activeSupervisorTeams) {
+      if (!selectedTeamIds.has(team.id)) continue;
+
+      for (const member of team.members || []) {
+        if (member.employee_name) employeeNames.push(member.employee_name);
+        if (member.intercom_agent_name) intercomAgentNames.push(member.intercom_agent_name);
+      }
+    }
+
+    const employeeKeys = new Set(employeeNames.map(normalizeRunKey));
+
+    for (const mapping of activeAgentMappings) {
+      if (!employeeKeys.has(normalizeRunKey(mapping.employee_name))) continue;
+      if (mapping.intercom_agent_name) intercomAgentNames.push(mapping.intercom_agent_name);
+    }
+
+    return {
+      employeeNames: uniqueSortedText(employeeNames),
+      intercomAgentNames: uniqueSortedText(intercomAgentNames),
+    };
+  }
+
+  function applySupervisorTeamFilterSelection(nextTeamIds) {
+    const normalizedTeamIds = uniqueSortedText(nextTeamIds);
+    setSelectedSupervisorTeamIds(normalizedTeamIds);
+
+    if (!normalizedTeamIds.length) {
+      setSelectedEmployeeNames([]);
+      setSelectedIntercomAgentNames([]);
+      resetRunStateForInputChange();
+      return;
+    }
+
+    const linkedSelection = getEmployeesAndAgentsForSupervisorTeams(normalizedTeamIds);
+    setSelectedEmployeeNames(linkedSelection.employeeNames);
+    setSelectedIntercomAgentNames(linkedSelection.intercomAgentNames);
+    resetRunStateForInputChange();
+  }
+
   function applyEmployeeFilterSelection(nextEmployees) {
     const normalizedEmployees = uniqueSortedText(nextEmployees);
+    setSelectedSupervisorTeamIds([]);
     setSelectedEmployeeNames(normalizedEmployees);
 
     if (!normalizedEmployees.length) {
@@ -1374,6 +1459,7 @@ export default function RunPage() {
 
   function applyIntercomAgentFilterSelection(nextAgents) {
     const normalizedAgents = uniqueSortedText(nextAgents);
+    setSelectedSupervisorTeamIds([]);
     setSelectedIntercomAgentNames(normalizedAgents);
 
     if (!normalizedAgents.length) {
@@ -1482,6 +1568,8 @@ export default function RunPage() {
   useEffect(() => {
     if (!session?.access_token) {
       setAgentMappings([]);
+      setSupervisorTeams([]);
+      setSelectedSupervisorTeamIds([]);
       return;
     }
 
@@ -1503,6 +1591,7 @@ export default function RunPage() {
     if (cached.limitCount) setLimitCount(cached.limitCount);
     if (typeof cached.autoRunAfterFetch === "boolean") setAutoRunAfterFetch(cached.autoRunAfterFetch);
     if (Array.isArray(cached.conversationRatings)) setConversationRatings(cached.conversationRatings);
+    if (Array.isArray(cached.selectedSupervisorTeamIds)) setSelectedSupervisorTeamIds(cached.selectedSupervisorTeamIds);
     if (Array.isArray(cached.selectedEmployeeNames)) setSelectedEmployeeNames(cached.selectedEmployeeNames);
     if (Array.isArray(cached.selectedIntercomAgentNames)) setSelectedIntercomAgentNames(cached.selectedIntercomAgentNames);
     if (cached.workflowRunId) setWorkflowRunId(cached.workflowRunId);
@@ -1562,6 +1651,7 @@ export default function RunPage() {
       limitCount,
       autoRunAfterFetch,
       conversationRatings,
+      selectedSupervisorTeamIds,
       selectedEmployeeNames,
       selectedIntercomAgentNames,
       workflowRunId,
@@ -1582,6 +1672,7 @@ export default function RunPage() {
     limitCount,
     autoRunAfterFetch,
     conversationRatings,
+    selectedSupervisorTeamIds,
     selectedEmployeeNames,
     selectedIntercomAgentNames,
     workflowRunId,
@@ -2298,7 +2389,8 @@ export default function RunPage() {
           selectedDatePreset,
           filters: {
             conversationRatings,
-                  employeeNames: selectedEmployeeNames,
+            supervisorTeamIds: selectedSupervisorTeamIds,
+            employeeNames: selectedEmployeeNames,
             intercomAgentNames: selectedIntercomAgentNames,
           },
         },
@@ -2323,7 +2415,8 @@ export default function RunPage() {
           limiterEnabled,
           limitCount,
           conversationRatings,
-              employeeNames: selectedEmployeeNames,
+          supervisorTeamIds: selectedSupervisorTeamIds,
+          employeeNames: selectedEmployeeNames,
           intercomAgentNames: selectedIntercomAgentNames,
           debug: true,
         }),
@@ -2637,6 +2730,14 @@ export default function RunPage() {
                   helper="Default: 3, 4, and 5. Clear selection to fetch any rating."
                 />
                 <MultiSelectFilter
+                  label="Supervisor Team"
+                  options={supervisorTeamFilterOptions}
+                  selected={selectedSupervisorTeamIds}
+                  onChange={applySupervisorTeamFilterSelection}
+                  placeholder="All Supervisor Teams"
+                  helper="Selecting one or more Supervisor Teams auto-selects their mapped employees and Intercom agents."
+                />
+                <MultiSelectFilter
                   label="Employee"
                   options={employeeFilterOptions}
                   selected={selectedEmployeeNames}
@@ -2656,6 +2757,7 @@ export default function RunPage() {
 
               <div className="filter-summary-grid">
                 <div><span>Conversation Rating</span><strong>{selectedFilterSummary.conversationRatings}</strong></div>
+                <div><span>Supervisor Teams</span><strong>{selectedFilterSummary.supervisorTeams}</strong></div>
                 <div><span>Employees</span><strong>{selectedFilterSummary.employees}</strong></div>
                 <div><span>Intercom Agents</span><strong>{selectedFilterSummary.agents}</strong></div>
               </div>
