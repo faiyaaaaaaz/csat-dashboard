@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MASTER_ADMIN_EMAIL = "faiyaz@nextventures.io";
-const MAX_LIMIT = 300;
+const MAX_LIMIT = 1000;
 
 const ALLOWED_CLIENT_ACTIONS = new Set([
   "session_heartbeat",
@@ -33,6 +33,10 @@ function normalizeEmail(value) {
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function normalizeSearchTerm(value) {
+  return normalizeText(value).replace(/[%,]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function getSupabaseClients() {
@@ -236,7 +240,7 @@ export async function GET(request) {
     const actionType = normalizeText(url.searchParams.get("action_type"));
     const status = normalizeText(url.searchParams.get("status"));
     const area = normalizeText(url.searchParams.get("area"));
-    const search = normalizeText(url.searchParams.get("search")).toLowerCase();
+    const search = normalizeSearchTerm(url.searchParams.get("search"));
     const startDate = normalizeText(url.searchParams.get("start_date"));
     const endDate = normalizeText(url.searchParams.get("end_date"));
 
@@ -275,6 +279,22 @@ export async function GET(request) {
     if (area) logsQuery = logsQuery.eq("area", area);
     if (startDate) logsQuery = logsQuery.gte("created_at", `${startDate}T00:00:00.000Z`);
     if (endDate) logsQuery = logsQuery.lte("created_at", `${endDate}T23:59:59.999Z`);
+    if (search) {
+      const pattern = `%${search}%`;
+      logsQuery = logsQuery.or([
+        `actor_email.ilike.${pattern}`,
+        `actor_name.ilike.${pattern}`,
+        `actor_role.ilike.${pattern}`,
+        `action_type.ilike.${pattern}`,
+        `action_label.ilike.${pattern}`,
+        `area.ilike.${pattern}`,
+        `target_type.ilike.${pattern}`,
+        `target_label.ilike.${pattern}`,
+        `status.ilike.${pattern}`,
+        `description.ilike.${pattern}`,
+        `request_path.ilike.${pattern}`
+      ].join(","));
+    }
 
     const { data: rawLogs, error: logsError } = await logsQuery;
 
@@ -331,6 +351,15 @@ export async function GET(request) {
     if (email) sessionsQuery = sessionsQuery.eq("email", email);
     if (startDate) sessionsQuery = sessionsQuery.gte("started_at", `${startDate}T00:00:00.000Z`);
     if (endDate) sessionsQuery = sessionsQuery.lte("started_at", `${endDate}T23:59:59.999Z`);
+    if (search) {
+      const pattern = `%${search}%`;
+      sessionsQuery = sessionsQuery.or([
+        `email.ilike.${pattern}`,
+        `full_name.ilike.${pattern}`,
+        `role.ilike.${pattern}`,
+        `status.ilike.${pattern}`
+      ].join(","));
+    }
 
     const { data: rawSessions, error: sessionsError } = await sessionsQuery;
 
