@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabase";
 
@@ -479,32 +479,89 @@ function normalizePreviewMessages(data) {
   return Array.isArray(data?.messages) ? data.messages : [];
 }
 
-function ConversationPreviewModal({ conversationId, onClose }) {
+function previewText(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const joined = value.map((item) => String(item ?? "").trim()).filter(Boolean).join(", ");
+      if (joined) return joined;
+      continue;
+    }
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function previewTags(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const list = value.map((item) => String(item ?? "").trim()).filter(Boolean);
+      if (list.length) return Array.from(new Set(list));
+    }
+    const text = String(value ?? "").trim();
+    if (text) return [text];
+  }
+  return [];
+}
+
+function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
+  const context = previewContext && typeof previewContext === "object" ? previewContext : {};
+  return {
+    conversationId: previewText(serverMetadata.conversationId, context.conversationId, context.conversation_id, context.id),
+    clientEmail: previewText(serverMetadata.clientEmail, context.clientEmail, context.client_email),
+    contactName: previewText(serverMetadata.clientName, serverMetadata.contactName, context.clientName, context.client_name),
+    assignedAgent: previewText(
+      serverMetadata.assignedAdmin,
+      context.agentName,
+      context.agent_name,
+      context.assignedAdmin,
+      context.assigned_admin
+    ),
+    rating: previewText(
+      serverMetadata.rating,
+      context.conversationRating,
+      context.conversation_rating,
+      context.csatScore,
+      context.csat_score,
+      context.rating
+    ),
+    status: previewText(serverMetadata.state, context.status, context.state),
+    createdAt: previewText(serverMetadata.createdAt, context.createdAt, context.created_at),
+    updatedAt: previewText(serverMetadata.updatedAt, context.updatedAt, context.updated_at, context.repliedAt, context.replied_at),
+    reviewApproach: previewText(context.reviewSentiment, context.review_sentiment, context.reviewApproach, context.review_approach),
+    clientSentiment: previewText(context.clientSentiment, context.client_sentiment),
+    resolutionStatus: previewText(context.resolutionStatus, context.resolution_status),
+    aiVerdict: previewText(context.aiVerdict, context.ai_verdict, context.error),
+    teamName: previewText(serverMetadata.teamName, context.teamName, context.team_name),
+    inboxName: previewText(serverMetadata.inboxName, context.inboxName, context.inbox_name),
+    workflowName: previewText(serverMetadata.workflowName, context.workflowName, context.workflow_name),
+    subject: previewText(serverMetadata.subject, context.subject),
+    tags: previewTags(serverMetadata.tags, context.tags),
+  };
+}
+
+function ConversationPreviewModal({ conversationId, previewContext = null, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadPreview() {
       if (!conversationId) return;
       setLoading(true);
       setError("");
       setData(null);
-
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
         if (!token) throw new Error("Your session expired. Please refresh and sign in again.");
-
         const response = await fetch("/api/intercom/conversation-preview", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
           body: JSON.stringify({ conversationId }),
           cache: "no-store",
         });
-
         const payload = await response.json().catch(() => null);
         if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Preview is not available for this conversation.");
         if (!cancelled) setData(payload);
@@ -514,15 +571,31 @@ function ConversationPreviewModal({ conversationId, onClose }) {
         if (!cancelled) setLoading(false);
       }
     }
-
     loadPreview();
     return () => { cancelled = true; };
   }, [conversationId]);
 
   if (!conversationId) return null;
-
   const messages = normalizePreviewMessages(data);
-  const metadata = data?.metadata || {};
+  const mergedMetadata = useMemo(() => buildPreviewMetadata(data?.metadata || {}, previewContext), [data, previewContext]);
+  const infoCards = [
+    { label: "Assigned Agent", value: mergedMetadata.assignedAgent || "Unassigned" },
+    { label: "Rating", value: mergedMetadata.rating || "-" },
+    { label: "Status", value: mergedMetadata.status || "-" },
+    { label: "Created", value: mergedMetadata.createdAt ? formatClock(mergedMetadata.createdAt) : "-" },
+    { label: "Review Approach", value: mergedMetadata.reviewApproach || "-" },
+    { label: "Client", value: mergedMetadata.clientSentiment || "-" },
+    { label: "Resolution", value: mergedMetadata.resolutionStatus || "-" },
+    { label: "Updated", value: mergedMetadata.updatedAt ? formatClock(mergedMetadata.updatedAt) : "-" },
+  ];
+  const detailCards = [
+    { label: "Contact", value: mergedMetadata.contactName || mergedMetadata.clientEmail || "" },
+    { label: "Team", value: mergedMetadata.teamName || "" },
+    { label: "Workflow", value: mergedMetadata.workflowName || "" },
+    { label: "Topic", value: mergedMetadata.subject || "" },
+    { label: "Inbox", value: mergedMetadata.inboxName || "" },
+  ].filter((card) => card.value);
+  const tags = mergedMetadata.tags || [];
 
   return createPortal(
     <div className="conversation-preview-backdrop" onClick={onClose}>
@@ -531,37 +604,54 @@ function ConversationPreviewModal({ conversationId, onClose }) {
           <div>
             <p>Conversation Preview</p>
             <h2>{conversationId}</h2>
-            <span>{metadata.clientEmail || "Client email unavailable"} · {formatNumber(messages.length)} message(s)</span>
+            <span>
+              {mergedMetadata.clientEmail || "Client email unavailable"} · {formatNumber(messages.length)} message(s)
+            </span>
           </div>
           <div className="conversation-preview-actions">
             <a href={conversationUrl(conversationId)} target="_blank" rel="noreferrer" className="secondary-btn">Open on Intercom</a>
-            <button type="button" className="light-btn" onClick={onClose}>Close</button>
+            <button type="button" className="secondary-btn light-action" onClick={onClose}>Close</button>
           </div>
         </div>
-
         {loading ? (
           <div className="conversation-preview-loading">Loading the full Intercom conversation...</div>
         ) : error ? (
-          <div className="conversation-preview-error">
-            <strong>Preview Not Available</strong>
-            <span>{error}</span>
-            <small>Open on Intercom to see this conversation.</small>
-          </div>
+          <div className="conversation-preview-error"><strong>Preview Not Available</strong><span>{error}</span><small>Open on Intercom to see this conversation.</small></div>
         ) : (
           <>
             <div className="conversation-preview-meta">
-              <div><span>Assigned Agent</span><strong>{metadata.assignedAdmin || "Unassigned"}</strong></div>
-              <div><span>Rating</span><strong>{metadata.rating || "-"}</strong></div>
-              <div><span>Status</span><strong>{metadata.state || "-"}</strong></div>
-              <div><span>Created</span><strong>{formatDateTime(metadata.createdAt)}</strong></div>
+              {infoCards.map((card) => (
+                <div key={card.label}><span>{card.label}</span><strong>{card.value}</strong></div>
+              ))}
             </div>
+            {detailCards.length || tags.length ? (
+              <div className="conversation-preview-attributes">
+                {detailCards.map((card) => (
+                  <div key={card.label} className="attribute-card"><span>{card.label}</span><strong>{card.value}</strong></div>
+                ))}
+                {tags.length ? (
+                  <div className="attribute-card tags-card">
+                    <span>Tags</span>
+                    <div className="conversation-preview-tags">
+                      {tags.map((tag) => <i key={tag}>{tag}</i>)}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {mergedMetadata.aiVerdict ? (
+              <div className="conversation-preview-verdict">
+                <div className="conversation-preview-verdict-head">
+                  <span>AI Verdict Snapshot</span>
+                  <small>From the stored audit result</small>
+                </div>
+                <pre>{mergedMetadata.aiVerdict}</pre>
+              </div>
+            ) : null}
             <div className="conversation-transcript-list">
               {messages.length ? messages.map((message) => (
                 <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
-                  <div className="conversation-message-top">
-                    <strong>{message.authorName || "Unknown"}</strong>
-                    <span>{formatDateTime(message.createdAt)}</span>
-                  </div>
+                  <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatClock(message.createdAt)}</span></div>
                   <p>{message.body || "Open on Intercom to see this message."}</p>
                   {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
                 </article>
@@ -575,16 +665,28 @@ function ConversationPreviewModal({ conversationId, onClose }) {
   );
 }
 
-function ConversationActionButtons({ conversationId, onPreview }) {
+function ConversationActionButtons({
+  conversationId,
+  previewContext = null,
+  onPreview,
+  onToggleVerdict = null,
+  verdictVisible = false,
+}) {
   const id = String(conversationId || "").trim();
   if (!id) return <span className="preview-unavailable">Preview Not Available</span>;
   return (
     <div className="conversation-action-buttons">
-      <button type="button" className="mini-preview-btn" onClick={() => onPreview(id)}>Preview Conversation</button>
+      <button type="button" className="mini-preview-btn" onClick={() => onPreview(id, previewContext)}>Preview Conversation</button>
       <a href={conversationUrl(id)} target="_blank" rel="noreferrer" className="mini-open-link">Open on Intercom</a>
+      {typeof onToggleVerdict === "function" ? (
+        <button type="button" className={`mini-verdict-btn ${verdictVisible ? "active" : ""}`} onClick={onToggleVerdict}>
+          {verdictVisible ? "Hide AI Verdict" : "See AI Verdict"}
+        </button>
+      ) : null}
     </div>
   );
 }
+
 
 function dedupeLatestByConversation(rows) {
   const byConversation = new Map();
@@ -1910,14 +2012,32 @@ function DetailModal({
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState(() => cloneFilters(initialFilters, "all", false));
   const [previewConversationId, setPreviewConversationId] = useState("");
+  const [previewContext, setPreviewContext] = useState(null);
+  const [expandedVerdicts, setExpandedVerdicts] = useState({});
 
   useEffect(() => {
     if (!open) return;
 
     setQuery("");
     setPreviewConversationId("");
+    setPreviewContext(null);
+    setExpandedVerdicts({});
     setFilters(cloneFilters(initialFilters, "all", false));
   }, [open, title, value, initialFilters]);
+
+  function openConversationPreview(conversationId, context = null) {
+    setPreviewConversationId(String(conversationId || "").trim());
+    setPreviewContext(context || null);
+  }
+
+  function closeConversationPreview() {
+    setPreviewConversationId("");
+    setPreviewContext(null);
+  }
+
+  function toggleVerdict(key) {
+    setExpandedVerdicts((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   const filteredRows = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -2009,27 +2129,52 @@ function DetailModal({
             </thead>
 
             <tbody>
-              {filteredRows.slice(0, 500).map((row, index) => (
-                <tr key={`${row.conversation_id}-${row.created_at}-${index}`}>
-                  <td>
-                    <strong>{row.conversation_id || "-"}</strong>
-                    <small>
-                      {row.agent_name || "Unassigned"}
-                      <br />
-                      {row.client_email || "-"}
-                    </small>
-                  </td>
-                  <td>{row.employee_name || "Unmapped"}</td>
-                  <td>{row.team_name || "-"}</td>
-                  <td>{row.review_sentiment || "-"}</td>
-                  <td>{row.client_sentiment || "-"}</td>
-                  <td>{row.resolution_status || "-"}</td>
-                  <td>{formatDateTime(row.replied_at || row.created_at)}</td>
-                  <td>
-                    <ConversationActionButtons conversationId={row.conversation_id} onPreview={setPreviewConversationId} />
-                  </td>
-                </tr>
-              ))}
+              {filteredRows.slice(0, 500).map((row, index) => {
+                const verdictKey = `${row.conversation_id}-${row.created_at}-${index}`;
+                const isVerdictVisible = Boolean(expandedVerdicts[verdictKey]);
+                return (
+                  <Fragment key={verdictKey}>
+                    <tr>
+                      <td>
+                        <strong>{row.conversation_id || "-"}</strong>
+                        <small>
+                          {row.agent_name || "Unassigned"}
+                          <br />
+                          {row.client_email || "-"}
+                        </small>
+                      </td>
+                      <td>{row.employee_name || "Unmapped"}</td>
+                      <td>{row.team_name || "-"}</td>
+                      <td>{row.review_sentiment || "-"}</td>
+                      <td>{row.client_sentiment || "-"}</td>
+                      <td>{row.resolution_status || "-"}</td>
+                      <td>{formatDateTime(row.replied_at || row.created_at)}</td>
+                      <td>
+                        <ConversationActionButtons
+                          conversationId={row.conversation_id}
+                          previewContext={row}
+                          onPreview={openConversationPreview}
+                          onToggleVerdict={() => toggleVerdict(verdictKey)}
+                          verdictVisible={isVerdictVisible}
+                        />
+                      </td>
+                    </tr>
+                    {isVerdictVisible ? (
+                      <tr className="expanded-row">
+                        <td colSpan={8}>
+                          <div className={row.error ? "verdict-box error" : "verdict-box"}>
+                            <div className="verdict-head">
+                              <span>{row.error ? "Error Details" : "AI Verdict"}</span>
+                              <small>{row.conversation_id || "Conversation"}</small>
+                            </div>
+                            <pre>{row.error || row.ai_verdict || "No AI verdict available."}</pre>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
 
@@ -2041,7 +2186,7 @@ function DetailModal({
         </div>
 
         {previewConversationId ? (
-          <ConversationPreviewModal conversationId={previewConversationId} onClose={() => setPreviewConversationId("")} />
+          <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} onClose={closeConversationPreview} />
         ) : null}
       </div>
     </div>
@@ -2232,11 +2377,11 @@ function DashboardLoadingScreen({ welcomeIdentity = null, showWelcome = false })
         <div className="dashboard-loader-card">
           <div className="dashboard-loader-logo" aria-hidden="true">
             <span className="dashboard-loader-halo" />
-            <span className="dashboard-loader-orbit orbit-a" />
-            <span className="dashboard-loader-orbit orbit-b" />
-            <span className="dashboard-loader-spark spark-a" />
-            <span className="dashboard-loader-spark spark-b" />
-            <span className="dashboard-loader-spark spark-c" />
+            <span className="dashboard-loader-link link-a" />
+            <span className="dashboard-loader-link link-b" />
+            <span className="dashboard-loader-node node-a" />
+            <span className="dashboard-loader-node node-b" />
+            <span className="dashboard-loader-node node-c" />
             <span className="dashboard-loader-gear gear-a">⚙</span>
             <span className="dashboard-loader-gear gear-b">⚙</span>
             <span className="dashboard-loader-gear gear-c">⚙</span>
@@ -2274,6 +2419,8 @@ function DashboardLoadingScreen({ welcomeIdentity = null, showWelcome = false })
 
 export default function DashboardPage() {
   const [previewConversationId, setPreviewConversationId] = useState("");
+  const [previewContext, setPreviewContext] = useState(null);
+  const [expandedVerdicts, setExpandedVerdicts] = useState({});
   const [loading, setLoading] = useState(true);
   const [rawRows, setRawRows] = useState([]);
   const [supervisorTeams, setSupervisorTeams] = useState([]);
@@ -2542,6 +2689,20 @@ export default function DashboardPage() {
 
   if (loading) {
     return <DashboardLoadingScreen welcomeIdentity={welcomeIdentity} showWelcome={showWelcomeOnLoading} />;
+  }
+
+  function openConversationPreview(conversationId, context = null) {
+    setPreviewConversationId(String(conversationId || "").trim());
+    setPreviewContext(context || null);
+  }
+
+  function closeConversationPreview() {
+    setPreviewConversationId("");
+    setPreviewContext(null);
+  }
+
+  function toggleVerdict(key) {
+    setExpandedVerdicts((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   function openDetail(title, value, rows, initialFilters = globalFilters) {
@@ -3046,27 +3207,52 @@ export default function DashboardPage() {
                   </thead>
 
                   <tbody>
-                    {filteredRows.slice(0, explorerExpanded ? 100 : 12).map((row, index) => (
-                      <tr key={`${row.conversation_id}-${index}`}>
-                        <td>
-                          <strong>{row.conversation_id}</strong>
-                          <small>
-                            {row.agent_name || "Unassigned"}
-                            <br />
-                            {row.client_email || "-"}
-                          </small>
-                        </td>
-                        <td>{row.employee_name || "Unmapped"}</td>
-                        <td>{row.team_name || "-"}</td>
-                        <td>{row.review_sentiment || "-"}</td>
-                        <td>{row.client_sentiment || "-"}</td>
-                        <td>{row.resolution_status || "-"}</td>
-                        <td>{formatDateTime(row.replied_at || row.created_at)}</td>
-                        <td>
-                          <ConversationActionButtons conversationId={row.conversation_id} onPreview={setPreviewConversationId} />
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredRows.slice(0, explorerExpanded ? 100 : 12).map((row, index) => {
+                      const verdictKey = `${row.conversation_id}-${row.created_at || row.replied_at || index}`;
+                      const isVerdictVisible = Boolean(expandedVerdicts[verdictKey]);
+                      return (
+                        <Fragment key={verdictKey}>
+                          <tr>
+                            <td>
+                              <strong>{row.conversation_id}</strong>
+                              <small>
+                                {row.agent_name || "Unassigned"}
+                                <br />
+                                {row.client_email || "-"}
+                              </small>
+                            </td>
+                            <td>{row.employee_name || "Unmapped"}</td>
+                            <td>{row.team_name || "-"}</td>
+                            <td>{row.review_sentiment || "-"}</td>
+                            <td>{row.client_sentiment || "-"}</td>
+                            <td>{row.resolution_status || "-"}</td>
+                            <td>{formatDateTime(row.replied_at || row.created_at)}</td>
+                            <td>
+                              <ConversationActionButtons
+                                conversationId={row.conversation_id}
+                                previewContext={row}
+                                onPreview={openConversationPreview}
+                                onToggleVerdict={() => toggleVerdict(verdictKey)}
+                                verdictVisible={isVerdictVisible}
+                              />
+                            </td>
+                          </tr>
+                          {isVerdictVisible ? (
+                            <tr className="expanded-row">
+                              <td colSpan={8}>
+                                <div className={row.error ? "verdict-box error" : "verdict-box"}>
+                                  <div className="verdict-head">
+                                    <span>{row.error ? "Error Details" : "AI Verdict"}</span>
+                                    <small>{row.conversation_id || "Conversation"}</small>
+                                  </div>
+                                  <pre>{row.error || row.ai_verdict || "No AI verdict available."}</pre>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -3076,7 +3262,7 @@ export default function DashboardPage() {
       </div>
 
       {previewConversationId ? (
-        <ConversationPreviewModal conversationId={previewConversationId} onClose={() => setPreviewConversationId("")} />
+        <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} onClose={closeConversationPreview} />
       ) : null}
 
       {showJumpTop ? (
@@ -3117,13 +3303,13 @@ const dashboardStyles = `
   .dashboard-loader-card {
     position: relative;
     overflow: hidden;
-    width: min(700px, 94vw);
+    width: min(660px, 94vw);
     display: grid;
     justify-items: center;
-    gap: 18px;
-    padding: 54px 52px 58px;
+    gap: 14px;
+    padding: 46px;
     text-align: center;
-    border-radius: 38px;
+    border-radius: 36px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background:
       radial-gradient(circle at 22% 0%, rgba(34, 211, 238, 0.1), transparent 34%),
@@ -3157,92 +3343,92 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-logo,
-  .dashboard-loader-card > p,
-  .dashboard-loader-card > h1,
-  .dashboard-loader-card > span,
-  .dashboard-loader-bar,
-  .dashboard-welcome-strip {
+  .dashboard-loader-card p,
+  .dashboard-loader-card h1,
+  .dashboard-loader-card span,
+  .dashboard-loader-bar {
     position: relative;
     z-index: 1;
   }
 
   .dashboard-loader-logo {
-    width: 170px;
-    height: 170px;
+    width: 146px;
+    height: 146px;
     display: block;
     place-items: center;
-    border-radius: 46px;
+    border-radius: 42px;
     border: 1px solid rgba(125, 211, 252, 0.22);
     background:
-      radial-gradient(circle at 28% 22%, rgba(255,255,255,0.22), transparent 20%),
+      radial-gradient(circle at 28% 22%, rgba(255,255,255,0.24), transparent 22%),
       linear-gradient(145deg, rgba(5, 12, 31, 0.98), rgba(15, 23, 42, 0.94));
     box-shadow:
       0 28px 72px rgba(18, 31, 67, 0.48),
-      0 0 52px rgba(34, 211, 238, 0.16),
+      0 0 52px rgba(34, 211, 238, 0.18),
       inset 0 1px 0 rgba(255,255,255,0.12);
   }
 
   .dashboard-loader-halo,
-  .dashboard-loader-orbit,
-  .dashboard-loader-spark,
+  .dashboard-loader-link,
+  .dashboard-loader-node,
   .dashboard-loader-gear {
     position: absolute;
     pointer-events: none;
   }
 
   .dashboard-loader-halo {
-    inset: 14px;
-    border-radius: 38px;
+    inset: 12px;
+    border-radius: 34px;
     background: radial-gradient(circle at center, rgba(34, 211, 238, 0.16), rgba(139, 92, 246, 0.12), transparent 72%);
     filter: blur(10px);
   }
 
-  .dashboard-loader-orbit {
+  .dashboard-loader-link {
+    height: 4px;
     border-radius: 999px;
-    border: 1px solid rgba(99, 102, 241, 0.28);
-    opacity: 0.95;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.78), rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.82));
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.34);
+    transform-origin: center;
   }
 
-  .dashboard-loader-orbit.orbit-a {
-    inset: 30px 20px 26px;
-    animation: dashboardOrbitFloat 5.8s ease-in-out infinite;
+  .dashboard-loader-link.link-a {
+    left: 38px;
+    top: 53px;
+    width: 70px;
+    transform: rotate(10deg);
   }
 
-  .dashboard-loader-orbit.orbit-b {
-    inset: 48px 12px 42px 36px;
-    border-color: rgba(236, 72, 153, 0.18);
-    animation: dashboardOrbitFloatReverse 4.8s ease-in-out infinite;
+  .dashboard-loader-link.link-b {
+    left: 58px;
+    top: 82px;
+    width: 54px;
+    transform: rotate(-38deg);
   }
 
-  .dashboard-loader-spark {
-    width: 8px;
-    height: 8px;
+  .dashboard-loader-node {
+    width: 9px;
+    height: 9px;
     border-radius: 999px;
-    box-shadow: 0 0 16px currentColor;
+    background: #dbeafe;
+    box-shadow: 0 0 18px rgba(191, 219, 254, 0.74);
   }
 
-  .dashboard-loader-spark.spark-a {
+  .dashboard-loader-node.node-a {
     left: 42px;
-    top: 52px;
-    color: #818cf8;
-    background: currentColor;
-    animation: dashboardSparkBlink 1.9s ease-in-out infinite;
+    top: 50px;
   }
 
-  .dashboard-loader-spark.spark-b {
-    left: 136px;
-    top: 60px;
-    color: #93c5fd;
-    background: currentColor;
-    animation: dashboardSparkBlink 2.2s ease-in-out infinite;
+  .dashboard-loader-node.node-b {
+    left: 102px;
+    top: 61px;
+    background: #c4b5fd;
+    box-shadow: 0 0 18px rgba(196, 181, 253, 0.8);
   }
 
-  .dashboard-loader-spark.spark-c {
-    left: 98px;
-    top: 134px;
-    color: #f472b6;
-    background: currentColor;
-    animation: dashboardSparkBlink 2.4s ease-in-out infinite;
+  .dashboard-loader-node.node-c {
+    left: 100px;
+    top: 101px;
+    background: #f9a8d4;
+    box-shadow: 0 0 18px rgba(249, 168, 212, 0.8);
   }
 
   .dashboard-loader-gear {
@@ -3252,37 +3438,35 @@ const dashboardStyles = `
     font-family: Arial, Helvetica, sans-serif;
     line-height: 1;
     text-shadow: 0 12px 28px rgba(0, 0, 0, 0.48);
+    filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.18));
   }
 
   .dashboard-loader-gear.gear-a {
-    left: 28px;
-    top: 52px;
-    font-size: 88px;
-    color: #8b5cf6;
-    filter: drop-shadow(0 0 16px rgba(139, 92, 246, 0.34));
-    animation: dashboardGearSpin 5.2s linear infinite;
+    left: 18px;
+    top: 22px;
+    font-size: 72px;
+    color: #dbeafe;
+    animation: dashboardGearSpin 4.8s linear infinite;
   }
 
   .dashboard-loader-gear.gear-b {
-    left: 82px;
-    top: 20px;
-    font-size: 78px;
-    color: #60a5fa;
-    filter: drop-shadow(0 0 18px rgba(96, 165, 250, 0.34));
-    animation: dashboardGearSpinReverse 4.4s linear infinite;
+    left: 72px;
+    top: 37px;
+    font-size: 54px;
+    color: #c4b5fd;
+    animation: dashboardGearSpinReverse 4s linear infinite;
   }
 
   .dashboard-loader-gear.gear-c {
-    left: 97px;
-    top: 95px;
-    font-size: 58px;
-    color: #22c55e;
-    filter: drop-shadow(0 0 16px rgba(34, 197, 94, 0.28));
-    animation: dashboardGearSpin 3.5s linear infinite;
+    left: 76px;
+    top: 82px;
+    font-size: 42px;
+    color: #f9a8d4;
+    animation: dashboardGearSpin 3.4s linear infinite;
   }
 
-  .dashboard-loader-card > p {
-    margin: 2px 0 0;
+  .dashboard-loader-card p {
+    margin: 14px 0 0;
     color: #93b4ff;
     font-size: 14px;
     font-weight: 950;
@@ -3290,30 +3474,29 @@ const dashboardStyles = `
     text-transform: uppercase;
   }
 
-  .dashboard-loader-card > h1 {
-    margin: -2px 0 0;
-    max-width: 560px;
+  .dashboard-loader-card h1 {
+    margin: 4px 0 0;
     color: #ffffff;
-    font-size: clamp(36px, 5vw, 64px);
-    line-height: 0.96;
+    font-size: clamp(34px, 5vw, 62px);
+    line-height: 0.95;
     letter-spacing: -0.07em;
   }
 
-  .dashboard-loader-card > span {
-    max-width: 520px;
-    margin-top: -2px;
+  .dashboard-loader-card span {
+    max-width: 460px;
     color: #aebbe1;
-    font-size: 18px;
-    line-height: 1.65;
+    font-size: 17px;
+    line-height: 1.7;
   }
 
   .dashboard-welcome-strip {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     gap: 14px;
-    width: min(470px, 100%);
-    margin: 4px 0 2px;
-    padding: 14px 16px;
+    width: min(440px, 100%);
+    padding: 12px 14px;
     border-radius: 22px;
     border: 1px solid rgba(125, 211, 252, 0.18);
     background:
@@ -3325,13 +3508,13 @@ const dashboardStyles = `
   }
 
   .dashboard-welcome-avatar {
-    width: 52px;
-    height: 52px;
-    min-width: 52px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
     display: grid;
     place-items: center;
     overflow: hidden;
-    border-radius: 18px;
+    border-radius: 17px;
     border: 1px solid rgba(191, 219, 254, 0.22);
     background: linear-gradient(135deg, rgba(34, 211, 238, 0.24), rgba(139, 92, 246, 0.25));
     box-shadow: 0 0 24px rgba(34, 211, 238, 0.18);
@@ -3368,7 +3551,7 @@ const dashboardStyles = `
   }
 
   .dashboard-welcome-copy strong {
-    margin-top: 5px;
+    margin-top: 4px;
     color: #93c5fd;
     font-size: 13px;
     font-weight: 900;
@@ -3377,9 +3560,9 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-bar {
-    width: min(380px, 80vw);
+    width: min(360px, 80vw);
     height: 7px;
-    margin-top: 10px;
+    margin-top: 14px;
     overflow: hidden;
     border-radius: 999px;
     background: rgba(255,255,255,0.08);
@@ -3392,21 +3575,6 @@ const dashboardStyles = `
     border-radius: inherit;
     background: linear-gradient(90deg, #22d3ee, #8b5cf6, #ec4899);
     animation: dashboardProgress 1.42s ease-in-out infinite;
-  }
-
-  @keyframes dashboardOrbitFloat {
-    0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.82; }
-    50% { transform: rotate(7deg) scale(1.02); opacity: 1; }
-  }
-
-  @keyframes dashboardOrbitFloatReverse {
-    0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.62; }
-    50% { transform: rotate(-8deg) scale(0.98); opacity: 0.88; }
-  }
-
-  @keyframes dashboardSparkBlink {
-    0%, 100% { transform: scale(0.86); opacity: 0.48; }
-    50% { transform: scale(1.15); opacity: 1; }
   }
 
   @keyframes dashboardProgress {
@@ -5350,6 +5518,40 @@ const dashboardStyles = `
     font-size: 23px;
   }
 
+  .expanded-row td {
+    padding-top: 0;
+    background: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  .verdict-box {
+    margin: 0 0 8px;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .verdict-box.error {
+    border-color: rgba(251, 113, 133, 0.18);
+    background: rgba(244, 63, 94, 0.08);
+  }
+
+  .verdict-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .verdict-box pre {
+    margin: 0;
+    white-space: pre-wrap;
+    color: #dbe7ff;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.8;
+  }
+
   .sentiment-resolution-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5731,38 +5933,6 @@ const dashboardStyles = `
 
 
   @media (max-width: 900px) {
-    .dashboard-loader-card {
-      padding: 44px 24px 48px;
-      gap: 16px;
-    }
-
-    .dashboard-loader-logo {
-      width: 154px;
-      height: 154px;
-    }
-
-    .dashboard-loader-gear.gear-a {
-      left: 22px;
-      top: 49px;
-      font-size: 80px;
-    }
-
-    .dashboard-loader-gear.gear-b {
-      left: 74px;
-      top: 19px;
-      font-size: 70px;
-    }
-
-    .dashboard-loader-gear.gear-c {
-      left: 88px;
-      top: 90px;
-      font-size: 52px;
-    }
-
-    .dashboard-welcome-strip {
-      width: min(100%, 440px);
-    }
-
     .upgraded-date-popover {
       grid-template-columns: 1fr !important;
     }
@@ -5774,35 +5944,49 @@ const dashboardStyles = `
   }
 
 
-  .conversation-action-buttons { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
-  .mini-preview-btn, .mini-open-link { min-height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(15, 23, 42, 0.86); color: #e7ecff; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; white-space: nowrap; }
-  .mini-preview-btn:hover, .mini-open-link:hover { border-color: rgba(34, 211, 238, 0.45); background: rgba(14, 165, 233, 0.16); }
+  .conversation-action-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .mini-preview-btn, .mini-open-link, .mini-verdict-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.22); color: #eef4ff; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; white-space: nowrap; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
+  .mini-preview-btn:hover, .mini-open-link:hover, .mini-verdict-btn:hover { transform: translateY(-1px); }
+  .mini-preview-btn { border-color: rgba(56, 189, 248, 0.36); background: linear-gradient(135deg, rgba(8, 47, 73, 0.95), rgba(14, 116, 144, 0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 26px rgba(8, 47, 73, 0.28); }
+  .mini-preview-btn:hover { border-color: rgba(103, 232, 249, 0.55); background: linear-gradient(135deg, rgba(14, 116, 144, 0.96), rgba(34, 211, 238, 0.28)); }
+  .mini-open-link { border-color: rgba(167, 139, 250, 0.32); background: linear-gradient(135deg, rgba(49, 46, 129, 0.95), rgba(91, 33, 182, 0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 26px rgba(76, 29, 149, 0.22); }
+  .mini-open-link:hover { border-color: rgba(196, 181, 253, 0.5); background: linear-gradient(135deg, rgba(76, 29, 149, 0.96), rgba(147, 51, 234, 0.3)); }
+  .mini-verdict-btn { border-color: rgba(244, 114, 182, 0.3); background: linear-gradient(135deg, rgba(80, 7, 36, 0.95), rgba(157, 23, 77, 0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 26px rgba(131, 24, 67, 0.22); }
+  .mini-verdict-btn:hover, .mini-verdict-btn.active { border-color: rgba(251, 207, 232, 0.55); background: linear-gradient(135deg, rgba(157, 23, 77, 0.96), rgba(236, 72, 153, 0.32)); }
   .preview-unavailable { color: #8ea0d6; font-size: 13px; font-weight: 800; }
-  .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2, 6, 23, 0.76); backdrop-filter: blur(16px); }
-  .conversation-preview-modal { width: min(980px, 96vw); max-height: min(86vh, 860px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 28px; background: linear-gradient(180deg, #10172b 0%, #050917 100%); box-shadow: 0 34px 120px rgba(0, 0, 0, 0.76), 0 0 0 1px rgba(96, 165, 250, 0.08); }
-  .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+  .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2, 6, 23, 0.78); backdrop-filter: blur(16px); }
+  .conversation-preview-modal { width: min(1260px, 98vw); max-height: min(90vh, 980px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 30px; background: linear-gradient(180deg, #10172b 0%, #050917 100%); box-shadow: 0 34px 120px rgba(0, 0, 0, 0.76), 0 0 0 1px rgba(96, 165, 250, 0.08); }
+  .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 24px 26px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
   .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
-  .conversation-preview-head h2 { margin: 0 0 6px; color: #ffffff; font-size: 26px; letter-spacing: -0.04em; }
+  .conversation-preview-head h2 { margin: 0 0 6px; color: #ffffff; font-size: 28px; letter-spacing: -0.04em; }
   .conversation-preview-head span { color: #a9b4d0; font-size: 15px; font-weight: 750; }
   .conversation-preview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-  .conversation-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
-  .conversation-preview-meta div { min-height: 62px; padding: 12px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.1); background: rgba(255, 255, 255, 0.035); }
-  .conversation-preview-meta span, .conversation-preview-meta strong { display: block; }
-  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; }
-  .conversation-preview-meta strong { color: #f8fbff; font-size: 15px; line-height: 1.35; }
-  .conversation-transcript-list { overflow: auto; padding: 20px 24px 24px; display: grid; gap: 12px; }
-  .conversation-message { max-width: 82%; padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.12); background: rgba(15, 23, 42, 0.82); }
+  .conversation-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 18px 26px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+  .conversation-preview-meta div, .conversation-preview-attributes .attribute-card { min-height: 72px; padding: 14px; border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.1); background: rgba(255, 255, 255, 0.035); }
+  .conversation-preview-meta span, .conversation-preview-meta strong, .conversation-preview-attributes span, .conversation-preview-attributes strong { display: block; }
+  .conversation-preview-meta span, .conversation-preview-attributes span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; }
+  .conversation-preview-meta strong, .conversation-preview-attributes strong { color: #f8fbff; font-size: 15px; line-height: 1.45; }
+  .conversation-preview-attributes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 26px 18px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+  .conversation-preview-attributes .tags-card { grid-column: span 2; }
+  .conversation-preview-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .conversation-preview-tags i { padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(96, 165, 250, 0.18); background: rgba(59, 130, 246, 0.12); color: #dbeafe; font-style: normal; font-size: 12px; font-weight: 800; }
+  .conversation-preview-verdict { margin: 18px 26px 0; padding: 18px; border-radius: 20px; border: 1px solid rgba(244, 114, 182, 0.18); background: linear-gradient(180deg, rgba(76, 29, 149, 0.14), rgba(91, 33, 182, 0.08)); }
+  .conversation-preview-verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .conversation-preview-verdict-head span, .conversation-preview-verdict-head small { color: #f5d0fe; font-weight: 900; }
+  .conversation-transcript-list { overflow: auto; padding: 20px 26px 28px; display: grid; gap: 14px; }
+  .conversation-message { max-width: 88%; padding: 16px 18px; border-radius: 20px; border: 1px solid rgba(148, 163, 184, 0.12); background: rgba(15, 23, 42, 0.82); }
   .conversation-message.client { justify-self: start; border-color: rgba(59, 130, 246, 0.18); background: rgba(30, 64, 175, 0.18); }
   .conversation-message.agent { justify-self: end; border-color: rgba(16, 185, 129, 0.18); background: rgba(6, 78, 59, 0.18); }
-  .conversation-message.system { justify-self: center; max-width: 92%; background: rgba(255, 255, 255, 0.045); }
+  .conversation-message.system { justify-self: center; max-width: 96%; background: rgba(255, 255, 255, 0.045); }
   .conversation-message-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   .conversation-message-top strong { color: #f8fbff; font-size: 15px; }
   .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 13px; font-weight: 800; }
-  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
-  .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 24px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148, 163, 184, 0.18); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
+  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.65; font-size: 15px; }
+  .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 26px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148, 163, 184, 0.18); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
   .conversation-preview-error strong, .conversation-preview-error span, .conversation-preview-error small { display: block; }
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
   .conversation-preview-error span { color: #f8fbff; margin-bottom: 6px; }
-  @media (max-width: 780px) { .conversation-preview-head, .conversation-preview-actions { flex-direction: column; align-items: stretch; } .conversation-preview-meta { grid-template-columns: 1fr; } .conversation-message { max-width: 100%; } }
+  @media (max-width: 960px) { .conversation-preview-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conversation-preview-attributes { grid-template-columns: 1fr 1fr; } .conversation-preview-attributes .tags-card { grid-column: span 2; } }
+  @media (max-width: 780px) { .conversation-preview-head, .conversation-preview-actions { flex-direction: column; align-items: stretch; } .conversation-preview-meta, .conversation-preview-attributes { grid-template-columns: 1fr; } .conversation-preview-attributes .tags-card { grid-column: auto; } .conversation-message { max-width: 100%; } }
 
 `;
