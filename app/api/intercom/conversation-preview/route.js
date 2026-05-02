@@ -68,6 +68,79 @@ function normalizeIntercomTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+function collectNames(values) {
+  const list = Array.isArray(values) ? values : [];
+  return Array.from(
+    new Set(
+      list
+        .map((item) => normalizeText(item?.name || item?.label || item))
+        .filter(Boolean)
+    )
+  );
+}
+
+function detectPrimaryAgentName(conversation) {
+  const direct = normalizeText(
+    conversation?.assignee?.name ||
+    conversation?.admin_assignee?.name ||
+    conversation?.teammate_assignee?.name
+  );
+
+  if (direct) return direct;
+
+  const sourceAuthor = conversation?.source?.author;
+  if (authorRole(sourceAuthor) === "agent") return authorLabel(sourceAuthor);
+
+  const parts = Array.isArray(conversation?.conversation_parts?.conversation_parts)
+    ? conversation.conversation_parts.conversation_parts
+    : [];
+
+  for (const part of parts) {
+    if (authorRole(part?.author) === "agent") return authorLabel(part.author);
+  }
+
+  return "";
+}
+
+function attachmentPreviewText(attachments) {
+  const list = Array.isArray(attachments) ? attachments : [];
+  if (!list.length) return "";
+
+  const names = list
+    .map((item) => normalizeText(item?.name || item?.file_name || item?.content_type))
+    .filter(Boolean);
+
+  const hasVisual = list.some((item) => {
+    const type = normalizeText(item?.content_type).toLowerCase();
+    return type.startsWith("image/") || type.startsWith("video/");
+  });
+
+  const prefix = hasVisual ? "Image or video omitted in preview." : "Attachment omitted in preview.";
+  return names.length ? `${prefix} ${names.join(", ")}` : prefix;
+}
+
+function buildPartFallbackBody(part) {
+  const attachmentText = attachmentPreviewText(part?.attachments);
+  if (attachmentText) return attachmentText;
+
+  const summary = stripHtml(part?.summary || part?.description || part?.redacted || part?.event_description);
+  if (summary) return summary;
+
+  const label = normalizeText(part?.part_type || part?.type || "update").replace(/_/g, " ");
+  const assignee = normalizeText(part?.assigned_to?.name || part?.admin_assignee?.name || part?.teammate_assignee?.name);
+
+  if (label && assignee) return `${label.charAt(0).toUpperCase() + label.slice(1)}: ${assignee}`;
+  if (label) return `${label.charAt(0).toUpperCase() + label.slice(1)}.`;
+
+  return "Open on Intercom to see this message.";
+}
+
+function buildSourceFallbackBody(source) {
+  const attachmentText = attachmentPreviewText(source?.attachments);
+  if (attachmentText) return attachmentText;
+  return "Open on Intercom to see this message.";
+}
+
 function authorLabel(author) {
   const type = normalizeText(author?.type).toLowerCase();
   const name = normalizeText(author?.name || author?.email || author?.id);
@@ -86,9 +159,11 @@ function authorRole(author) {
   return "system";
 }
 
-function buildMessage({ id, author, body, createdAt, messageType, sourceType }) {
+function buildMessage({ id, author, body, createdAt, messageType, sourceType, fallbackBody }) {
   const cleaned = stripHtml(body);
-  const hasText = Boolean(cleaned);
+  const fallback = normalizeText(fallbackBody);
+  const finalBody = cleaned || fallback || "Open on Intercom to see this message.";
+  const hasRenderableText = Boolean(cleaned || fallback);
 
   return {
     id: normalizeText(id) || crypto.randomUUID(),
@@ -97,8 +172,8 @@ function buildMessage({ id, author, body, createdAt, messageType, sourceType }) 
     authorEmail: normalizeEmail(author?.email) || null,
     createdAt: normalizeIntercomTimestamp(createdAt),
     messageType: normalizeText(messageType || sourceType || "message") || "message",
-    body: hasText ? cleaned : "Open on Intercom to see this message.",
-    isRenderableText: hasText,
+    body: finalBody,
+    isRenderableText: hasRenderableText,
   };
 }
 
@@ -114,6 +189,7 @@ function buildTranscript(conversation) {
         createdAt: conversation.created_at,
         messageType: conversation.source.type || "conversation_start",
         sourceType: "conversation_start",
+        fallbackBody: buildSourceFallbackBody(conversation.source),
       })
     );
   }
@@ -130,6 +206,7 @@ function buildTranscript(conversation) {
         body: part?.body,
         createdAt: part?.created_at,
         messageType: part?.part_type || part?.type || "conversation_part",
+        fallbackBody: buildPartFallbackBody(part),
       })
     );
   }
@@ -149,21 +226,27 @@ function buildMetadata(conversation) {
     createdAt: normalizeIntercomTimestamp(conversation?.created_at),
     updatedAt: normalizeIntercomTimestamp(conversation?.updated_at),
     state: normalizeText(conversation?.state || conversation?.status),
+    clientName:
+      normalizeText(conversation?.contacts?.contacts?.[0]?.name) ||
+      normalizeText(conversation?.source?.author?.name) ||
+      normalizeText(conversation?.author?.name) ||
+      "",
     clientEmail:
       normalizeEmail(conversation?.contacts?.contacts?.[0]?.email) ||
       normalizeEmail(conversation?.source?.author?.email) ||
       normalizeEmail(conversation?.author?.email) ||
       "",
-    assignedAdmin:
-      normalizeText(conversation?.assignee?.name) ||
-      normalizeText(conversation?.admin_assignee?.name) ||
-      normalizeText(conversation?.teammate_assignee?.name) ||
-      "Unassigned",
+    assignedAdmin: detectPrimaryAgentName(conversation) || "Unassigned",
     rating:
       conversation?.conversation_rating?.score ??
       conversation?.conversation_rating?.rating ??
       conversation?.conversation_rating?.value ??
       null,
+    subject: normalizeText(conversation?.source?.subject || conversation?.source?.title || conversation?.title),
+    teamName: normalizeText(conversation?.team_assignee?.name || conversation?.team?.name),
+    inboxName: normalizeText(conversation?.inbox?.name || conversation?.source?.name),
+    workflowName: normalizeText(conversation?.conversation_message?.subject || conversation?.source?.delivered_as),
+    tags: collectNames(conversation?.tags?.tags),
   };
 }
 
