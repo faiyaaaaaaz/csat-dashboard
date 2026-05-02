@@ -44,23 +44,6 @@ const SCORE_FILTER_OPTIONS = [
 
 const DEFAULT_CONVERSATION_RATINGS = ["3", "4", "5"];
 
-const QUEUE_SELECTION_FILTER_OPTIONS = [
-  { value: "all", label: "All Conversations" },
-  { value: "selected", label: "Selected Only" },
-  { value: "unselected", label: "Unselected Only" },
-];
-
-const QUEUE_SORT_OPTIONS = [
-  { value: "fetched_order", label: "Fetched Order" },
-  { value: "replied_desc", label: "Replied Date: Newest First" },
-  { value: "replied_asc", label: "Replied Date: Oldest First" },
-  { value: "created_desc", label: "Created Date: Newest First" },
-  { value: "created_asc", label: "Created Date: Oldest First" },
-  { value: "rating_desc", label: "Rating: High to Low" },
-  { value: "rating_asc", label: "Rating: Low to High" },
-  { value: "agent_asc", label: "Agent / Employee: A to Z" },
-];
-
 const FETCH_STEPS = [
   "Preparing request",
   "Checking access",
@@ -528,84 +511,55 @@ function conversationIdOf(item) {
   return String(item?.conversationId || item?.conversation_id || item?.id || "").trim();
 }
 
-function queueItemAgentName(item) {
-  return normalizeRunText(item?.agentName || item?.agent_name || item?.assigneeName || item?.assignee_name || "Unassigned") || "Unassigned";
-}
-
-function queueItemClientEmail(item) {
-  return normalizeRunText(item?.clientEmail || item?.client_email || "");
-}
-
-function queueItemRating(item) {
-  return normalizeRunText(item?.conversationRating ?? item?.conversation_rating ?? item?.csatScore ?? item?.csat_score ?? "");
-}
-
-function queueItemRepliedAt(item) {
-  return item?.repliedAt || item?.replied_at || null;
-}
-
-function queueItemCreatedAt(item) {
-  return item?.createdAt || item?.created_at || item?.created || item?.created_time || null;
-}
-
-function queueTimestampMs(value) {
-  const date = normalizeTimestampForDisplay(value);
-  return date ? date.getTime() : 0;
-}
-
-function queueNumber(value, fallback = -1) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function queueIdentityForItem(item, mappingByAgentKey) {
-  const agentName = queueItemAgentName(item);
-  const mapping = mappingByAgentKey?.get(normalizeRunKey(agentName)) || null;
-
-  return {
-    agentName,
-    employeeName: normalizeRunText(mapping?.employee_name) || agentName,
-    employeeEmail: normalizeRunText(mapping?.employee_email),
-    teamName: normalizeRunText(mapping?.team_name),
-  };
-}
-
-function queueItemMatchesSupervisorTeam(item, supervisorTeam, identity) {
-  if (!supervisorTeam) return true;
-
-  const compareKeys = [
-    queueItemAgentName(item),
-    identity?.agentName,
-    identity?.employeeName,
-    identity?.employeeEmail,
-  ].map(normalizeRunKey).filter(Boolean);
-
-  const members = Array.isArray(supervisorTeam.members) ? supervisorTeam.members : [];
-  if (!members.length) return false;
-
-  return members.some((member) => {
-    const memberKeys = [
-      member?.intercom_agent_name,
-      member?.employee_name,
-      member?.employee_email,
-    ].map(normalizeRunKey).filter(Boolean);
-
-    return memberKeys.some((key) => compareKeys.includes(key));
-  });
-}
-
-function queueSupervisorLabelsForItem(item, supervisorTeams, identity) {
-  return (Array.isArray(supervisorTeams) ? supervisorTeams : [])
-    .filter((team) => queueItemMatchesSupervisorTeam(item, team, identity))
-    .map((team) => team.supervisor_name)
-    .filter(Boolean);
-}
-
 function normalizePreviewMessages(data) {
   return Array.isArray(data?.messages) ? data.messages : [];
 }
 
-function ConversationPreviewModal({ conversationId, onClose }) {
+function previewText(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const joined = value.map((item) => String(item ?? "").trim()).filter(Boolean).join(", ");
+      if (joined) return joined;
+      continue;
+    }
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function previewTags(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const list = value.map((item) => String(item ?? "").trim()).filter(Boolean);
+      if (list.length) return Array.from(new Set(list));
+    }
+    const text = String(value ?? "").trim();
+    if (text) return [text];
+  }
+  return [];
+}
+
+function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
+  const context = previewContext && typeof previewContext === "object" ? previewContext : {};
+  return {
+    conversationId: previewText(serverMetadata.conversationId, context.conversationId, context.conversation_id, context.id),
+    clientEmail: previewText(serverMetadata.clientEmail, context.clientEmail, context.client_email),
+    contactName: previewText(serverMetadata.clientName, serverMetadata.contactName, context.clientName, context.client_name),
+    assignedAgent: previewText(serverMetadata.assignedAdmin, context.agentName, context.agent_name, context.assignedAdmin),
+    rating: previewText(serverMetadata.rating, context.conversationRating, context.conversation_rating, context.csatScore, context.csat_score, context.rating),
+    status: previewText(serverMetadata.state, context.status, context.state),
+    createdAt: previewText(serverMetadata.createdAt, context.createdAt, context.created_at),
+    updatedAt: previewText(serverMetadata.updatedAt, context.updatedAt, context.updated_at, context.repliedAt, context.replied_at),
+    teamName: previewText(serverMetadata.teamName, context.teamName, context.team_name),
+    inboxName: previewText(serverMetadata.inboxName, context.inboxName, context.inbox_name),
+    workflowName: previewText(serverMetadata.workflowName, context.workflowName, context.workflow_name),
+    subject: previewText(serverMetadata.subject, context.subject),
+    tags: previewTags(serverMetadata.tags, context.tags),
+  };
+}
+
+function ConversationPreviewModal({ previewItem = null, conversationId, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
@@ -647,7 +601,18 @@ function ConversationPreviewModal({ conversationId, onClose }) {
 
   if (!conversationId) return null;
   const messages = normalizePreviewMessages(data);
-  const metadata = data?.metadata || {};
+  const mergedMetadata = useMemo(() => buildPreviewMetadata(data?.metadata || {}, previewItem), [data, previewItem]);
+  const infoCards = [
+    { label: "Assigned Agent", value: mergedMetadata.assignedAgent || "Unassigned" },
+    { label: "Rating", value: mergedMetadata.rating || "-" },
+    { label: "Status", value: mergedMetadata.status || "-" },
+    { label: "Created", value: mergedMetadata.createdAt ? formatClock(mergedMetadata.createdAt) : "-" },
+    { label: "Updated", value: mergedMetadata.updatedAt ? formatClock(mergedMetadata.updatedAt) : "-" },
+    { label: "Team", value: mergedMetadata.teamName || "-" },
+    { label: "Workflow", value: mergedMetadata.workflowName || "-" },
+    { label: "Topic", value: mergedMetadata.subject || "-" },
+  ];
+  const tags = mergedMetadata.tags || [];
 
   return createPortal(
     <div className="conversation-preview-backdrop" onClick={onClose}>
@@ -656,7 +621,7 @@ function ConversationPreviewModal({ conversationId, onClose }) {
           <div>
             <p>Conversation Preview</p>
             <h2>{conversationId}</h2>
-            <span>{metadata.clientEmail || "Client email unavailable"} · {formatNumber(messages.length)} message(s)</span>
+            <span>{mergedMetadata.clientEmail || "Client email unavailable"} · {formatNumber(messages.length)} message(s)</span>
           </div>
           <div className="conversation-preview-actions">
             <a href={intercomConversationUrl(conversationId)} target="_blank" rel="noreferrer" className="secondary-btn">Open on Intercom</a>
@@ -670,11 +635,22 @@ function ConversationPreviewModal({ conversationId, onClose }) {
         ) : (
           <>
             <div className="conversation-preview-meta">
-              <div><span>Assigned Agent</span><strong>{metadata.assignedAdmin || "Unassigned"}</strong></div>
-              <div><span>Rating</span><strong>{metadata.rating || "-"}</strong></div>
-              <div><span>Status</span><strong>{metadata.state || "-"}</strong></div>
-              <div><span>Created</span><strong>{formatClock(metadata.createdAt)}</strong></div>
+              {infoCards.map((card) => (
+                <div key={card.label}><span>{card.label}</span><strong>{card.value}</strong></div>
+              ))}
             </div>
+            {mergedMetadata.contactName || tags.length ? (
+              <div className="conversation-preview-attributes">
+                {mergedMetadata.contactName ? <div className="attribute-card"><span>Contact</span><strong>{mergedMetadata.contactName}</strong></div> : null}
+                {mergedMetadata.inboxName ? <div className="attribute-card"><span>Inbox</span><strong>{mergedMetadata.inboxName}</strong></div> : null}
+                {tags.length ? (
+                  <div className="attribute-card tags-card">
+                    <span>Tags</span>
+                    <div className="conversation-preview-tags">{tags.map((tag) => <i key={tag}>{tag}</i>)}</div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="conversation-transcript-list">
               {messages.length ? messages.map((message) => (
                 <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
@@ -1173,14 +1149,22 @@ export default function RunPage() {
   const [showAllResults, setShowAllResults] = useState(false);
   const [queueExpanded, setQueueExpanded] = useState(false);
   const [queueSearchText, setQueueSearchText] = useState("");
-  const [queueSelectionFilter, setQueueSelectionFilter] = useState("all");
-  const [queueRatingFilter, setQueueRatingFilter] = useState("all");
-  const [queueAgentFilter, setQueueAgentFilter] = useState("all");
-  const [queueSupervisorTeamFilter, setQueueSupervisorTeamFilter] = useState("all");
-  const [queueSortBy, setQueueSortBy] = useState("fetched_order");
   const [selectedQueueIds, setSelectedQueueIds] = useState([]);
   const [previewConversationId, setPreviewConversationId] = useState("");
+  const [previewConversationItem, setPreviewConversationItem] = useState(null);
   const [showJumpTop, setShowJumpTop] = useState(false);
+
+  function openConversationPreview(itemOrId) {
+    const item = itemOrId && typeof itemOrId === "object" ? itemOrId : null;
+    const id = String(item?.conversationId || item?.conversation_id || item?.id || itemOrId || "").trim();
+    setPreviewConversationId(id);
+    setPreviewConversationItem(item);
+  }
+
+  function closeConversationPreview() {
+    setPreviewConversationId("");
+    setPreviewConversationItem(null);
+  }
   const [_elapsedTick, setElapsedTick] = useState(0);
 
   const [duplicateWarningOpen, setDuplicateWarningOpen] = useState(false);
@@ -1224,6 +1208,19 @@ export default function RunPage() {
   const dailySummary = Array.isArray(fetchData?.debug?.dailySummary)
     ? fetchData.debug.dailySummary
     : [];
+
+  const filteredFetchedQueue = useMemo(() => {
+    const search = queueSearchText.trim().toLowerCase();
+    if (!search) return fetchedConversations;
+    return fetchedConversations.filter((item) => {
+      const haystack = [conversationIdOf(item), item?.agentName, item?.clientEmail, item?.conversationRating, item?.csatScore, item?.repliedAt].join(" ").toLowerCase();
+      return haystack.includes(search);
+    });
+  }, [fetchedConversations, queueSearchText]);
+
+  const visibleFetchedQueue = queueExpanded ? filteredFetchedQueue : filteredFetchedQueue.slice(0, 8);
+  const selectedQueueSet = useMemo(() => new Set(selectedQueueIds), [selectedQueueIds]);
+  const allVisibleQueueSelected = visibleFetchedQueue.length > 0 && visibleFetchedQueue.every((item) => selectedQueueSet.has(conversationIdOf(item)));
 
   const results = Array.isArray(runData?.results) ? runData.results : [];
   const successCount = results.filter((item) => !item?.error).length;
@@ -1298,147 +1295,6 @@ export default function RunPage() {
         return { ...option, helper: mapping?.employee_name ? `Employee: ${mapping.employee_name}` : "Unmapped" };
       }),
     [activeAgentMappings]
-  );
-
-  const queueMappingByAgentKey = useMemo(() => {
-    const map = new Map();
-
-    activeAgentMappings.forEach((mapping) => {
-      const intercomKey = normalizeRunKey(mapping.intercom_agent_name);
-      const employeeKey = normalizeRunKey(mapping.employee_name);
-
-      if (intercomKey) map.set(intercomKey, mapping);
-      if (employeeKey) map.set(employeeKey, mapping);
-    });
-
-    return map;
-  }, [activeAgentMappings]);
-
-  const selectedQueueSet = useMemo(() => new Set(selectedQueueIds), [selectedQueueIds]);
-
-  const queueRatingFilterOptions = useMemo(() => {
-    const values = uniqueSortedText(fetchedConversations.map(queueItemRating));
-    return values.map((value) => ({ value, label: value || "No Rating" }));
-  }, [fetchedConversations]);
-
-  const queueAgentFilterOptions = useMemo(() => {
-    const options = new Map();
-
-    fetchedConversations.forEach((item) => {
-      const identity = queueIdentityForItem(item, queueMappingByAgentKey);
-      const agentKey = normalizeRunKey(identity.agentName);
-      const employeeKey = normalizeRunKey(identity.employeeName);
-
-      if (agentKey) {
-        options.set(`agent:${agentKey}`, {
-          value: identity.agentName,
-          label: identity.agentName,
-          helper: identity.employeeName && normalizeRunKey(identity.employeeName) !== agentKey ? `Employee: ${identity.employeeName}` : "Intercom Agent",
-        });
-      }
-
-      if (employeeKey && employeeKey !== agentKey) {
-        options.set(`employee:${employeeKey}`, {
-          value: identity.employeeName,
-          label: identity.employeeName,
-          helper: identity.agentName ? `Agent: ${identity.agentName}` : "Employee",
-        });
-      }
-    });
-
-    return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [fetchedConversations, queueMappingByAgentKey]);
-
-  const selectedQueueSupervisorTeam = useMemo(
-    () => activeSupervisorTeams.find((team) => team.id === queueSupervisorTeamFilter) || null,
-    [activeSupervisorTeams, queueSupervisorTeamFilter]
-  );
-
-  const filteredFetchedQueue = useMemo(() => {
-    const search = queueSearchText.trim().toLowerCase();
-    const selectedAgentKey = queueAgentFilter === "all" ? "" : normalizeRunKey(queueAgentFilter);
-    const selectedRatingKey = queueRatingFilter === "all" ? "" : normalizeRunKey(queueRatingFilter);
-
-    const filtered = fetchedConversations.filter((item) => {
-      const id = conversationIdOf(item);
-      const identity = queueIdentityForItem(item, queueMappingByAgentKey);
-      const rating = queueItemRating(item);
-      const ratingKey = normalizeRunKey(rating);
-      const isSelected = selectedQueueSet.has(id);
-      const supervisorLabels = queueSupervisorLabelsForItem(item, activeSupervisorTeams, identity);
-
-      if (queueSelectionFilter === "selected" && !isSelected) return false;
-      if (queueSelectionFilter === "unselected" && isSelected) return false;
-      if (selectedRatingKey && ratingKey !== selectedRatingKey) return false;
-
-      if (selectedAgentKey) {
-        const agentKeys = [identity.agentName, identity.employeeName, identity.employeeEmail, identity.teamName]
-          .map(normalizeRunKey)
-          .filter(Boolean);
-        if (!agentKeys.includes(selectedAgentKey)) return false;
-      }
-
-      if (selectedQueueSupervisorTeam && !queueItemMatchesSupervisorTeam(item, selectedQueueSupervisorTeam, identity)) {
-        return false;
-      }
-
-      if (search) {
-        const haystack = [
-          id,
-          identity.agentName,
-          identity.employeeName,
-          identity.employeeEmail,
-          identity.teamName,
-          queueItemClientEmail(item),
-          rating,
-          queueItemRepliedAt(item),
-          queueItemCreatedAt(item),
-          ...supervisorLabels,
-        ].join(" ").toLowerCase();
-
-        if (!haystack.includes(search)) return false;
-      }
-
-      return true;
-    });
-
-    return filtered.sort((a, b) => {
-      const identityA = queueIdentityForItem(a, queueMappingByAgentKey);
-      const identityB = queueIdentityForItem(b, queueMappingByAgentKey);
-
-      if (queueSortBy === "replied_desc") return queueTimestampMs(queueItemRepliedAt(b)) - queueTimestampMs(queueItemRepliedAt(a));
-      if (queueSortBy === "replied_asc") return queueTimestampMs(queueItemRepliedAt(a)) - queueTimestampMs(queueItemRepliedAt(b));
-      if (queueSortBy === "created_desc") return queueTimestampMs(queueItemCreatedAt(b) || queueItemRepliedAt(b)) - queueTimestampMs(queueItemCreatedAt(a) || queueItemRepliedAt(a));
-      if (queueSortBy === "created_asc") return queueTimestampMs(queueItemCreatedAt(a) || queueItemRepliedAt(a)) - queueTimestampMs(queueItemCreatedAt(b) || queueItemRepliedAt(b));
-      if (queueSortBy === "rating_desc") return queueNumber(queueItemRating(b)) - queueNumber(queueItemRating(a));
-      if (queueSortBy === "rating_asc") return queueNumber(queueItemRating(a)) - queueNumber(queueItemRating(b));
-      if (queueSortBy === "agent_asc") return identityA.agentName.localeCompare(identityB.agentName);
-
-      return 0;
-    });
-  }, [
-    activeSupervisorTeams,
-    fetchedConversations,
-    queueAgentFilter,
-    queueMappingByAgentKey,
-    queueRatingFilter,
-    queueSearchText,
-    queueSelectionFilter,
-    queueSortBy,
-    selectedQueueSet,
-    selectedQueueSupervisorTeam,
-  ]);
-
-  const visibleFetchedQueue = queueExpanded ? filteredFetchedQueue : filteredFetchedQueue.slice(0, 8);
-  const allVisibleQueueSelected = visibleFetchedQueue.length > 0 && visibleFetchedQueue.every((item) => selectedQueueSet.has(conversationIdOf(item)));
-  const selectedInFilteredQueueCount = filteredFetchedQueue.filter((item) => selectedQueueSet.has(conversationIdOf(item))).length;
-  const queueFiltersActive = Boolean(
-    queueSearchText.trim() ||
-      queueSelectionFilter !== "all" ||
-      queueRatingFilter !== "all" ||
-      queueAgentFilter !== "all" ||
-      queueSupervisorTeamFilter !== "all" ||
-      queueSortBy !== "fetched_order"
   );
 
   const selectedFilterSummary = useMemo(
@@ -2003,33 +1859,6 @@ export default function RunPage() {
     }
 
     loadAgentMappingsForFilters(session);
-  }, [session?.access_token]);
-
-  useEffect(() => {
-    if (!session?.access_token) return;
-
-    let lastRefreshAt = 0;
-
-    function refreshMappingsAfterAdminChange() {
-      const now = Date.now();
-      if (now - lastRefreshAt < 5000) return;
-      lastRefreshAt = now;
-      loadAgentMappingsForFilters(session);
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        refreshMappingsAfterAdminChange();
-      }
-    }
-
-    window.addEventListener("focus", refreshMappingsAfterAdminChange);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", refreshMappingsAfterAdminChange);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
   }, [session?.access_token]);
 
   useEffect(() => {
@@ -2879,22 +2708,6 @@ export default function RunPage() {
       return;
     }
     setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
-  }
-
-  function selectAllFilteredQueueRows() {
-    const filteredIds = filteredFetchedQueue.map(conversationIdOf).filter(Boolean);
-    if (!filteredIds.length) return;
-    setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
-  }
-
-  function resetQueueFilters() {
-    setQueueSearchText("");
-    setQueueSelectionFilter("all");
-    setQueueRatingFilter("all");
-    setQueueAgentFilter("all");
-    setQueueSupervisorTeamFilter("all");
-    setQueueSortBy("fetched_order");
-    setQueueExpanded(false);
   }
 
   function performRemoveSelectedFromQueue() {
@@ -3993,96 +3806,21 @@ export default function RunPage() {
           <div className="empty-box">No conversations are currently queued. Fetch again or adjust filters.</div>
         ) : (
           <>
-            <div className="fetched-queue-toolbar upgraded">
-              <div className="queue-control-panel">
-                <label className="queue-filter-field wide">
-                  <span>Client / Conversation Search</span>
-                  <input
-                    value={queueSearchText}
-                    onChange={(event) => setQueueSearchText(event.target.value)}
-                    placeholder="Search conversation ID, client email, agent, employee, team, or rating"
-                  />
-                </label>
-
-                <label className="queue-filter-field">
-                  <span>Selection Status</span>
-                  <select value={queueSelectionFilter} onChange={(event) => setQueueSelectionFilter(event.target.value)}>
-                    {QUEUE_SELECTION_FILTER_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="queue-filter-field">
-                  <span>Conversation Rating</span>
-                  <select value={queueRatingFilter} onChange={(event) => setQueueRatingFilter(event.target.value)}>
-                    <option value="all">All Ratings</option>
-                    {queueRatingFilterOptions.map((option) => (
-                      <option key={option.value || "blank-rating"} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="queue-filter-field">
-                  <span>Agent / Employee</span>
-                  <select value={queueAgentFilter} onChange={(event) => setQueueAgentFilter(event.target.value)}>
-                    <option value="all">All Agents & Employees</option>
-                    {queueAgentFilterOptions.map((option) => (
-                      <option key={`${option.value}-${option.helper}`} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="queue-filter-field">
-                  <span>Supervisor Team</span>
-                  <select value={queueSupervisorTeamFilter} onChange={(event) => setQueueSupervisorTeamFilter(event.target.value)}>
-                    <option value="all">All Supervisor Teams</option>
-                    {supervisorTeamFilterOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="queue-filter-field">
-                  <span>Sort Queue</span>
-                  <select value={queueSortBy} onChange={(event) => setQueueSortBy(event.target.value)}>
-                    {QUEUE_SORT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="queue-filter-summary-row">
-                <div className="queue-filter-summary-card">
-                  <span>Current View</span>
-                  <strong>{formatNumber(filteredFetchedQueue.length)} of {formatNumber(fetchedConversations.length)}</strong>
-                  <small>Filtered conversations</small>
-                </div>
-                <div className="queue-filter-summary-card">
-                  <span>Selected In View</span>
-                  <strong>{formatNumber(selectedInFilteredQueueCount)}</strong>
-                  <small>{formatNumber(selectedQueueIds.length)} selected total</small>
-                </div>
-                <div className="queue-filter-summary-card">
-                  <span>Audit Queue</span>
-                  <strong>{formatNumber(queuedConversationCount)}</strong>
-                  <small>Limiter-aware count</small>
-                </div>
-              </div>
-
+            <div className="fetched-queue-toolbar">
+              <label className="queue-search-field">
+                <span>Search Fetched Conversations</span>
+                <input
+                  value={queueSearchText}
+                  onChange={(event) => setQueueSearchText(event.target.value)}
+                  placeholder="Conversation, agent, client, rating"
+                />
+              </label>
               <div className="queue-toolbar-actions">
-                <button type="button" className="secondary-btn" onClick={toggleAllVisibleQueueSelection} disabled={!visibleFetchedQueue.length}>
+                <button type="button" className="secondary-btn" onClick={toggleAllVisibleQueueSelection}>
                   {allVisibleQueueSelected ? "Clear Visible" : "Select Visible"}
-                </button>
-                <button type="button" className="secondary-btn" onClick={selectAllFilteredQueueRows} disabled={!filteredFetchedQueue.length}>
-                  Select Filtered
                 </button>
                 <button type="button" className="secondary-btn" onClick={() => setSelectedQueueIds([])} disabled={!selectedQueueIds.length}>
                   Clear Selection
-                </button>
-                <button type="button" className="secondary-btn" onClick={resetQueueFilters} disabled={!queueFiltersActive}>
-                  Reset Queue Filters
                 </button>
                 <button type="button" className="danger-btn" onClick={removeSelectedFromQueue} disabled={!selectedQueueIds.length || runLoading}>
                   Remove Selected
@@ -4093,17 +3831,13 @@ export default function RunPage() {
               </div>
             </div>
 
-            {filteredFetchedQueue.length === 0 ? (
-              <div className="empty-box">No queue rows match the current filters. Clear filters or broaden the search.</div>
-            ) : (
             <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead>
                   <tr>
                     <th><input className="queue-select" type="checkbox" checked={allVisibleQueueSelected} onChange={toggleAllVisibleQueueSelection} /></th>
                     <th>Conversation</th>
-                    <th>Agent / Employee</th>
-                    <th>Supervisor Team</th>
+                    <th>Agent</th>
                     <th>Client</th>
                     <th>Rating</th>
                     <th>Replied</th>
@@ -4113,23 +3847,18 @@ export default function RunPage() {
                 <tbody>
                   {visibleFetchedQueue.map((item, index) => {
                     const id = conversationIdOf(item);
-                    const identity = queueIdentityForItem(item, queueMappingByAgentKey);
-                    const supervisorLabels = queueSupervisorLabelsForItem(item, activeSupervisorTeams, identity);
-                    const supervisorLabel = supervisorLabels.length ? supervisorLabels.join(", ") : identity.teamName || "-";
-                    const rating = queueItemRating(item);
                     return (
                       <tr key={id || `queue-${index}`}>
                         <td><input className="queue-select" type="checkbox" checked={selectedQueueSet.has(id)} onChange={() => toggleQueueSelection(id)} /></td>
                         <td><strong>{id || "-"}</strong><small>Fetched from Intercom</small></td>
-                        <td><strong>{identity.agentName || "Unassigned"}</strong>{identity.employeeName && normalizeRunKey(identity.employeeName) !== normalizeRunKey(identity.agentName) ? <small>{identity.employeeName}</small> : null}</td>
-                        <td>{supervisorLabel}</td>
-                        <td>{queueItemClientEmail(item) || "-"}</td>
-                        <td>{rating || "-"}</td>
-                        <td>{formatClock(queueItemRepliedAt(item))}</td>
+                        <td>{item?.agentName || "Unassigned"}</td>
+                        <td>{item?.clientEmail || "-"}</td>
+                        <td>{item?.conversationRating || item?.csatScore || "-"}</td>
+                        <td>{formatClock(item?.repliedAt)}</td>
                         <td>
                           <div className="queue-action-cell">
-                            <button type="button" className="queue-action-btn" onClick={() => setPreviewConversationId(id)} disabled={!id}>Preview</button>
-                            {id ? <a className="queue-action-btn" href={intercomConversationUrl(id)} target="_blank" rel="noreferrer">Open on Intercom</a> : null}
+                            <button type="button" className="queue-action-btn preview" onClick={() => openConversationPreview(item)} disabled={!id}>Preview</button>
+                            {id ? <a className="queue-action-btn intercom" href={intercomConversationUrl(id)} target="_blank" rel="noreferrer">Open on Intercom</a> : null}
                           </div>
                         </td>
                       </tr>
@@ -4138,10 +3867,9 @@ export default function RunPage() {
                 </tbody>
               </table>
             </div>
-            )}
 
             <div className="queue-table-footer">
-              <span className="soft-copy">Showing {formatNumber(visibleFetchedQueue.length)} of {formatNumber(filteredFetchedQueue.length)} filtered conversation(s). {queueFiltersActive ? "Queue filters are active." : "No queue filters active."}</span>
+              <span className="soft-copy">Showing {formatNumber(visibleFetchedQueue.length)} of {formatNumber(filteredFetchedQueue.length)} filtered conversation(s).</span>
               {filteredFetchedQueue.length > 8 ? (
                 <button type="button" className="secondary-btn" onClick={() => setQueueExpanded((prev) => !prev)}>
                   {queueExpanded ? "Show Less" : `Show More (${formatNumber(filteredFetchedQueue.length - visibleFetchedQueue.length)} more)`}
@@ -4287,7 +4015,7 @@ export default function RunPage() {
       ) : null}
 
       {previewConversationId ? (
-        <ConversationPreviewModal conversationId={previewConversationId} onClose={() => setPreviewConversationId("")} />
+        <ConversationPreviewModal previewItem={previewConversationItem} conversationId={previewConversationId} onClose={closeConversationPreview} />
       ) : null}
 
       {showJumpTop ? (
@@ -6696,61 +6424,57 @@ const runStyles = `
     }
   }
   .fetched-queue-panel.compact-preview-panel { padding: 20px; }
-  .fetched-queue-toolbar.upgraded { display: grid; gap: 14px; margin-bottom: 14px; }
-  .queue-control-panel { display: grid; grid-template-columns: minmax(280px, 1.35fr) repeat(5, minmax(170px, 1fr)); gap: 12px; align-items: end; }
-  .queue-filter-field { min-width: 0; display: grid; gap: 8px; }
-  .queue-filter-field span { display: block; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
-  .queue-filter-field input, .queue-filter-field select { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.18); color: #e7ecff; background: #050812; outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
-  .queue-filter-field select { cursor: pointer; appearance: auto; }
-  .queue-filter-field input:focus, .queue-filter-field select:focus { border-color: rgba(34,211,238,.48); box-shadow: 0 0 0 3px rgba(34,211,238,.09), inset 0 1px 0 rgba(255,255,255,.06); }
-  .queue-filter-summary-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-  .queue-filter-summary-card { min-height: 76px; padding: 13px 14px; border-radius: 18px; border: 1px solid rgba(148,163,184,.14); background: linear-gradient(135deg, rgba(15,23,42,.82), rgba(6,12,30,.94)); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
-  .queue-filter-summary-card span, .queue-filter-summary-card small { display: block; color: #8ea0d6; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-  .queue-filter-summary-card strong { display: block; margin: 5px 0 3px; color: #f8fbff; font-size: 22px; line-height: 1.05; letter-spacing: -.03em; }
-  .queue-filter-summary-card small { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 760; }
+  .fetched-queue-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 14px; align-items: end; margin-bottom: 14px; }
+  .queue-search-field span { display: block; margin-bottom: 8px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+  .queue-search-field input { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.16); color: #e7ecff; background: rgba(5,8,18,.92); outline: none; }
   .queue-toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-  .queue-table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.35); max-height: 460px; }
-  .queue-table { width: 100%; border-collapse: collapse; min-width: 1160px; }
-  .queue-table th, .queue-table td { padding: 13px 14px; border-bottom: 1px solid rgba(148,163,184,.1); text-align: left; vertical-align: top; }
-  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.92); font-size: 12px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
-  .queue-table td { color: #e7ecff; font-size: 15px; font-weight: 750; line-height: 1.45; }
-  .queue-table td strong { display: block; color: #f8fbff; font-size: 15px; line-height: 1.35; }
+  .queue-table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.35); max-height: 420px; }
+  .queue-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+  .queue-table th, .queue-table td { padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,.1); text-align: left; vertical-align: top; }
+  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.86); font-size: 12px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
+  .queue-table td { color: #e7ecff; font-size: 15px; font-weight: 750; }
   .queue-table small { display: block; margin-top: 4px; color: #8ea0d6; font-size: 13px; line-height: 1.4; }
   .queue-select { width: 18px; height: 18px; accent-color: #22d3ee; }
   .queue-action-cell { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .queue-action-btn { min-height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.9); color: #e7ecff; font-size: 13px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; }
-  .queue-action-btn:hover { border-color: rgba(34,211,238,.45); background: rgba(14,165,233,.16); }
+  .queue-action-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(148,163,184,.22); color: #eef4ff; font-size: 13px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
+  .queue-action-btn:hover { transform: translateY(-1px); }
+  .queue-action-btn.preview { border-color: rgba(56,189,248,.36); background: linear-gradient(135deg, rgba(8,47,73,.95), rgba(14,116,144,.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 26px rgba(8,47,73,.28); }
+  .queue-action-btn.preview:hover { border-color: rgba(103,232,249,.55); background: linear-gradient(135deg, rgba(14,116,144,.96), rgba(34,211,238,.28)); }
+  .queue-action-btn.intercom { border-color: rgba(167,139,250,.32); background: linear-gradient(135deg, rgba(49,46,129,.95), rgba(91,33,182,.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 26px rgba(76,29,149,.22); }
+  .queue-action-btn.intercom:hover { border-color: rgba(196,181,253,.5); background: linear-gradient(135deg, rgba(76,29,149,.96), rgba(147,51,234,.3)); }
   .queue-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
-  @media (max-width: 1280px) { .queue-control-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .queue-filter-field.wide { grid-column: 1 / -1; } }
-  @media (max-width: 780px) { .queue-control-panel, .queue-filter-summary-row { grid-template-columns: 1fr; } .queue-toolbar-actions { justify-content: stretch; } }
   .ai-working-inline { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(148,163,184,.24); background: rgba(15,23,42,.78); color: #e5e7eb; font-size: 15px; font-weight: 900; box-shadow: 0 12px 34px rgba(0,0,0,.24); }
   .gear-loader { position: relative; width: 42px; height: 28px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   .gear-loader::before, .gear-loader::after { content: "⚙︎"; position: absolute; font-family: Arial, Helvetica, sans-serif; line-height: 1; color: #d1d5db; text-shadow: 0 8px 18px rgba(0,0,0,.48); animation: gearSpin 1.8s linear infinite; }
   .gear-loader::before { left: 0; top: 0; font-size: 27px; }
   .gear-loader::after { left: 20px; top: 8px; font-size: 20px; color: #6b7280; animation-direction: reverse; animation-duration: 1.25s; }
   @keyframes gearSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2,6,23,.76); backdrop-filter: blur(16px); }
-  .conversation-preview-modal { width: min(980px, 96vw); max-height: min(86vh, 860px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148,163,184,.18); border-radius: 28px; background: linear-gradient(180deg,#10172b 0%,#050917 100%); box-shadow: 0 34px 120px rgba(0,0,0,.76), 0 0 0 1px rgba(96,165,250,.08); }
-  .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: 1px solid rgba(148,163,184,.12); }
-  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
-  .conversation-preview-head h2 { margin: 0 0 6px; color: #fff; font-size: 26px; letter-spacing: -.04em; }
+  .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(2, 6, 23, 0.78); backdrop-filter: blur(16px); }
+  .conversation-preview-modal { width: min(1260px, 98vw); max-height: min(90vh, 980px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 30px; background: linear-gradient(180deg, #10172b 0%, #050917 100%); box-shadow: 0 34px 120px rgba(0, 0, 0, 0.76), 0 0 0 1px rgba(96, 165, 250, 0.08); }
+  .conversation-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 24px 26px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+  .conversation-preview-head p { margin: 0 0 6px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
+  .conversation-preview-head h2 { margin: 0 0 6px; color: #ffffff; font-size: 28px; letter-spacing: -0.04em; }
   .conversation-preview-head span { color: #a9b4d0; font-size: 15px; font-weight: 750; }
   .conversation-preview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-  .conversation-preview-meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; padding: 16px 24px; border-bottom: 1px solid rgba(148,163,184,.1); }
-  .conversation-preview-meta div { min-height: 62px; padding: 12px; border-radius: 16px; border: 1px solid rgba(148,163,184,.1); background: rgba(255,255,255,.035); }
-  .conversation-preview-meta span, .conversation-preview-meta strong { display: block; }
-  .conversation-preview-meta span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
-  .conversation-preview-meta strong { color: #f8fbff; font-size: 15px; line-height: 1.35; }
-  .conversation-transcript-list { overflow: auto; padding: 20px 24px 24px; display: grid; gap: 12px; }
-  .conversation-message { max-width: 82%; padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(15,23,42,.82); }
-  .conversation-message.client { justify-self: start; border-color: rgba(59,130,246,.18); background: rgba(30,64,175,.18); }
-  .conversation-message.agent { justify-self: end; border-color: rgba(16,185,129,.18); background: rgba(6,78,59,.18); }
-  .conversation-message.system { justify-self: center; max-width: 92%; background: rgba(255,255,255,.045); }
+  .conversation-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 18px 26px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+  .conversation-preview-meta div, .conversation-preview-attributes .attribute-card { min-height: 72px; padding: 14px; border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.1); background: rgba(255, 255, 255, 0.035); }
+  .conversation-preview-meta span, .conversation-preview-meta strong, .conversation-preview-attributes span, .conversation-preview-attributes strong { display: block; }
+  .conversation-preview-meta span, .conversation-preview-attributes span { margin-bottom: 6px; color: #8ea0d6; font-size: 12px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; }
+  .conversation-preview-meta strong, .conversation-preview-attributes strong { color: #f8fbff; font-size: 15px; line-height: 1.45; }
+  .conversation-preview-attributes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 26px 18px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+  .conversation-preview-attributes .tags-card { grid-column: span 2; }
+  .conversation-preview-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .conversation-preview-tags i { padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(96, 165, 250, 0.18); background: rgba(59, 130, 246, 0.12); color: #dbeafe; font-style: normal; font-size: 12px; font-weight: 800; }
+  .conversation-transcript-list { overflow: auto; padding: 20px 26px 28px; display: grid; gap: 14px; }
+  .conversation-message { max-width: 88%; padding: 16px 18px; border-radius: 20px; border: 1px solid rgba(148, 163, 184, 0.12); background: rgba(15, 23, 42, 0.82); }
+  .conversation-message.client { justify-self: start; border-color: rgba(59, 130, 246, 0.18); background: rgba(30, 64, 175, 0.18); }
+  .conversation-message.agent { justify-self: end; border-color: rgba(16, 185, 129, 0.18); background: rgba(6, 78, 59, 0.18); }
+  .conversation-message.system { justify-self: center; max-width: 96%; background: rgba(255, 255, 255, 0.045); }
   .conversation-message-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   .conversation-message-top strong { color: #f8fbff; font-size: 15px; }
   .conversation-message-top span, .conversation-message small { color: #8ea0d6; font-size: 13px; font-weight: 800; }
-  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
-  .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 24px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148,163,184,.18); color: #dbe7ff; background: rgba(15,23,42,.7); }
+  .conversation-message p { margin: 0; color: #dbe7ff; white-space: pre-wrap; line-height: 1.65; font-size: 15px; }
+  .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 20px 26px 24px; padding: 22px; border-radius: 18px; border: 1px dashed rgba(148, 163, 184, 0.18); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
   .conversation-preview-error strong, .conversation-preview-error span, .conversation-preview-error small { display: block; }
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
   .conversation-preview-error span { color: #f8fbff; margin-bottom: 6px; }
