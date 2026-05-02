@@ -44,6 +44,23 @@ const SCORE_FILTER_OPTIONS = [
 
 const DEFAULT_CONVERSATION_RATINGS = ["3", "4", "5"];
 
+const QUEUE_SELECTION_FILTER_OPTIONS = [
+  { value: "all", label: "All Conversations" },
+  { value: "selected", label: "Selected Only" },
+  { value: "unselected", label: "Unselected Only" },
+];
+
+const QUEUE_SORT_OPTIONS = [
+  { value: "fetched_order", label: "Fetched Order" },
+  { value: "replied_desc", label: "Replied Date: Newest First" },
+  { value: "replied_asc", label: "Replied Date: Oldest First" },
+  { value: "created_desc", label: "Created Date: Newest First" },
+  { value: "created_asc", label: "Created Date: Oldest First" },
+  { value: "rating_desc", label: "Rating: High to Low" },
+  { value: "rating_asc", label: "Rating: Low to High" },
+  { value: "agent_asc", label: "Agent / Employee: A to Z" },
+];
+
 const FETCH_STEPS = [
   "Preparing request",
   "Checking access",
@@ -509,6 +526,78 @@ function intercomConversationUrl(conversationId) {
 
 function conversationIdOf(item) {
   return String(item?.conversationId || item?.conversation_id || item?.id || "").trim();
+}
+
+function queueItemAgentName(item) {
+  return normalizeRunText(item?.agentName || item?.agent_name || item?.assigneeName || item?.assignee_name || "Unassigned") || "Unassigned";
+}
+
+function queueItemClientEmail(item) {
+  return normalizeRunText(item?.clientEmail || item?.client_email || "");
+}
+
+function queueItemRating(item) {
+  return normalizeRunText(item?.conversationRating ?? item?.conversation_rating ?? item?.csatScore ?? item?.csat_score ?? "");
+}
+
+function queueItemRepliedAt(item) {
+  return item?.repliedAt || item?.replied_at || null;
+}
+
+function queueItemCreatedAt(item) {
+  return item?.createdAt || item?.created_at || item?.created || item?.created_time || null;
+}
+
+function queueTimestampMs(value) {
+  const date = normalizeTimestampForDisplay(value);
+  return date ? date.getTime() : 0;
+}
+
+function queueNumber(value, fallback = -1) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function queueIdentityForItem(item, mappingByAgentKey) {
+  const agentName = queueItemAgentName(item);
+  const mapping = mappingByAgentKey?.get(normalizeRunKey(agentName)) || null;
+
+  return {
+    agentName,
+    employeeName: normalizeRunText(mapping?.employee_name) || agentName,
+    employeeEmail: normalizeRunText(mapping?.employee_email),
+    teamName: normalizeRunText(mapping?.team_name),
+  };
+}
+
+function queueItemMatchesSupervisorTeam(item, supervisorTeam, identity) {
+  if (!supervisorTeam) return true;
+
+  const compareKeys = [
+    queueItemAgentName(item),
+    identity?.agentName,
+    identity?.employeeName,
+    identity?.employeeEmail,
+    identity?.teamName,
+  ].map(normalizeRunKey).filter(Boolean);
+
+  return (Array.isArray(supervisorTeam.members) ? supervisorTeam.members : []).some((member) => {
+    const memberKeys = [
+      member?.intercom_agent_name,
+      member?.employee_name,
+      member?.employee_email,
+      member?.team_name,
+    ].map(normalizeRunKey).filter(Boolean);
+
+    return memberKeys.some((key) => compareKeys.includes(key));
+  });
+}
+
+function queueSupervisorLabelsForItem(item, supervisorTeams, identity) {
+  return (Array.isArray(supervisorTeams) ? supervisorTeams : [])
+    .filter((team) => queueItemMatchesSupervisorTeam(item, team, identity))
+    .map((team) => team.supervisor_name)
+    .filter(Boolean);
 }
 
 function normalizePreviewMessages(data) {
@@ -1083,6 +1172,11 @@ export default function RunPage() {
   const [showAllResults, setShowAllResults] = useState(false);
   const [queueExpanded, setQueueExpanded] = useState(false);
   const [queueSearchText, setQueueSearchText] = useState("");
+  const [queueSelectionFilter, setQueueSelectionFilter] = useState("all");
+  const [queueRatingFilter, setQueueRatingFilter] = useState("all");
+  const [queueAgentFilter, setQueueAgentFilter] = useState("all");
+  const [queueSupervisorTeamFilter, setQueueSupervisorTeamFilter] = useState("all");
+  const [queueSortBy, setQueueSortBy] = useState("fetched_order");
   const [selectedQueueIds, setSelectedQueueIds] = useState([]);
   const [previewConversationId, setPreviewConversationId] = useState("");
   const [showJumpTop, setShowJumpTop] = useState(false);
@@ -1129,19 +1223,6 @@ export default function RunPage() {
   const dailySummary = Array.isArray(fetchData?.debug?.dailySummary)
     ? fetchData.debug.dailySummary
     : [];
-
-  const filteredFetchedQueue = useMemo(() => {
-    const search = queueSearchText.trim().toLowerCase();
-    if (!search) return fetchedConversations;
-    return fetchedConversations.filter((item) => {
-      const haystack = [conversationIdOf(item), item?.agentName, item?.clientEmail, item?.conversationRating, item?.csatScore, item?.repliedAt].join(" ").toLowerCase();
-      return haystack.includes(search);
-    });
-  }, [fetchedConversations, queueSearchText]);
-
-  const visibleFetchedQueue = queueExpanded ? filteredFetchedQueue : filteredFetchedQueue.slice(0, 8);
-  const selectedQueueSet = useMemo(() => new Set(selectedQueueIds), [selectedQueueIds]);
-  const allVisibleQueueSelected = visibleFetchedQueue.length > 0 && visibleFetchedQueue.every((item) => selectedQueueSet.has(conversationIdOf(item)));
 
   const results = Array.isArray(runData?.results) ? runData.results : [];
   const successCount = results.filter((item) => !item?.error).length;
@@ -1216,6 +1297,147 @@ export default function RunPage() {
         return { ...option, helper: mapping?.employee_name ? `Employee: ${mapping.employee_name}` : "Unmapped" };
       }),
     [activeAgentMappings]
+  );
+
+  const queueMappingByAgentKey = useMemo(() => {
+    const map = new Map();
+
+    activeAgentMappings.forEach((mapping) => {
+      const intercomKey = normalizeRunKey(mapping.intercom_agent_name);
+      const employeeKey = normalizeRunKey(mapping.employee_name);
+
+      if (intercomKey) map.set(intercomKey, mapping);
+      if (employeeKey) map.set(employeeKey, mapping);
+    });
+
+    return map;
+  }, [activeAgentMappings]);
+
+  const selectedQueueSet = useMemo(() => new Set(selectedQueueIds), [selectedQueueIds]);
+
+  const queueRatingFilterOptions = useMemo(() => {
+    const values = uniqueSortedText(fetchedConversations.map(queueItemRating));
+    return values.map((value) => ({ value, label: value || "No Rating" }));
+  }, [fetchedConversations]);
+
+  const queueAgentFilterOptions = useMemo(() => {
+    const options = new Map();
+
+    fetchedConversations.forEach((item) => {
+      const identity = queueIdentityForItem(item, queueMappingByAgentKey);
+      const agentKey = normalizeRunKey(identity.agentName);
+      const employeeKey = normalizeRunKey(identity.employeeName);
+
+      if (agentKey) {
+        options.set(`agent:${agentKey}`, {
+          value: identity.agentName,
+          label: identity.agentName,
+          helper: identity.employeeName && normalizeRunKey(identity.employeeName) !== agentKey ? `Employee: ${identity.employeeName}` : "Intercom Agent",
+        });
+      }
+
+      if (employeeKey && employeeKey !== agentKey) {
+        options.set(`employee:${employeeKey}`, {
+          value: identity.employeeName,
+          label: identity.employeeName,
+          helper: identity.agentName ? `Agent: ${identity.agentName}` : "Employee",
+        });
+      }
+    });
+
+    return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [fetchedConversations, queueMappingByAgentKey]);
+
+  const selectedQueueSupervisorTeam = useMemo(
+    () => activeSupervisorTeams.find((team) => team.id === queueSupervisorTeamFilter) || null,
+    [activeSupervisorTeams, queueSupervisorTeamFilter]
+  );
+
+  const filteredFetchedQueue = useMemo(() => {
+    const search = queueSearchText.trim().toLowerCase();
+    const selectedAgentKey = queueAgentFilter === "all" ? "" : normalizeRunKey(queueAgentFilter);
+    const selectedRatingKey = queueRatingFilter === "all" ? "" : normalizeRunKey(queueRatingFilter);
+
+    const filtered = fetchedConversations.filter((item) => {
+      const id = conversationIdOf(item);
+      const identity = queueIdentityForItem(item, queueMappingByAgentKey);
+      const rating = queueItemRating(item);
+      const ratingKey = normalizeRunKey(rating);
+      const isSelected = selectedQueueSet.has(id);
+      const supervisorLabels = queueSupervisorLabelsForItem(item, activeSupervisorTeams, identity);
+
+      if (queueSelectionFilter === "selected" && !isSelected) return false;
+      if (queueSelectionFilter === "unselected" && isSelected) return false;
+      if (selectedRatingKey && ratingKey !== selectedRatingKey) return false;
+
+      if (selectedAgentKey) {
+        const agentKeys = [identity.agentName, identity.employeeName, identity.employeeEmail, identity.teamName]
+          .map(normalizeRunKey)
+          .filter(Boolean);
+        if (!agentKeys.includes(selectedAgentKey)) return false;
+      }
+
+      if (selectedQueueSupervisorTeam && !queueItemMatchesSupervisorTeam(item, selectedQueueSupervisorTeam, identity)) {
+        return false;
+      }
+
+      if (search) {
+        const haystack = [
+          id,
+          identity.agentName,
+          identity.employeeName,
+          identity.employeeEmail,
+          identity.teamName,
+          queueItemClientEmail(item),
+          rating,
+          queueItemRepliedAt(item),
+          queueItemCreatedAt(item),
+          ...supervisorLabels,
+        ].join(" ").toLowerCase();
+
+        if (!haystack.includes(search)) return false;
+      }
+
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      const identityA = queueIdentityForItem(a, queueMappingByAgentKey);
+      const identityB = queueIdentityForItem(b, queueMappingByAgentKey);
+
+      if (queueSortBy === "replied_desc") return queueTimestampMs(queueItemRepliedAt(b)) - queueTimestampMs(queueItemRepliedAt(a));
+      if (queueSortBy === "replied_asc") return queueTimestampMs(queueItemRepliedAt(a)) - queueTimestampMs(queueItemRepliedAt(b));
+      if (queueSortBy === "created_desc") return queueTimestampMs(queueItemCreatedAt(b) || queueItemRepliedAt(b)) - queueTimestampMs(queueItemCreatedAt(a) || queueItemRepliedAt(a));
+      if (queueSortBy === "created_asc") return queueTimestampMs(queueItemCreatedAt(a) || queueItemRepliedAt(a)) - queueTimestampMs(queueItemCreatedAt(b) || queueItemRepliedAt(b));
+      if (queueSortBy === "rating_desc") return queueNumber(queueItemRating(b)) - queueNumber(queueItemRating(a));
+      if (queueSortBy === "rating_asc") return queueNumber(queueItemRating(a)) - queueNumber(queueItemRating(b));
+      if (queueSortBy === "agent_asc") return identityA.agentName.localeCompare(identityB.agentName);
+
+      return 0;
+    });
+  }, [
+    activeSupervisorTeams,
+    fetchedConversations,
+    queueAgentFilter,
+    queueMappingByAgentKey,
+    queueRatingFilter,
+    queueSearchText,
+    queueSelectionFilter,
+    queueSortBy,
+    selectedQueueSet,
+    selectedQueueSupervisorTeam,
+  ]);
+
+  const visibleFetchedQueue = queueExpanded ? filteredFetchedQueue : filteredFetchedQueue.slice(0, 8);
+  const allVisibleQueueSelected = visibleFetchedQueue.length > 0 && visibleFetchedQueue.every((item) => selectedQueueSet.has(conversationIdOf(item)));
+  const selectedInFilteredQueueCount = filteredFetchedQueue.filter((item) => selectedQueueSet.has(conversationIdOf(item))).length;
+  const queueFiltersActive = Boolean(
+    queueSearchText.trim() ||
+      queueSelectionFilter !== "all" ||
+      queueRatingFilter !== "all" ||
+      queueAgentFilter !== "all" ||
+      queueSupervisorTeamFilter !== "all" ||
+      queueSortBy !== "fetched_order"
   );
 
   const selectedFilterSummary = useMemo(
@@ -2631,6 +2853,22 @@ export default function RunPage() {
     setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
   }
 
+  function selectAllFilteredQueueRows() {
+    const filteredIds = filteredFetchedQueue.map(conversationIdOf).filter(Boolean);
+    if (!filteredIds.length) return;
+    setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+  }
+
+  function resetQueueFilters() {
+    setQueueSearchText("");
+    setQueueSelectionFilter("all");
+    setQueueRatingFilter("all");
+    setQueueAgentFilter("all");
+    setQueueSupervisorTeamFilter("all");
+    setQueueSortBy("fetched_order");
+    setQueueExpanded(false);
+  }
+
   function performRemoveSelectedFromQueue() {
     if (!selectedQueueIds.length) return;
     const selected = new Set(selectedQueueIds);
@@ -3727,21 +3965,96 @@ export default function RunPage() {
           <div className="empty-box">No conversations are currently queued. Fetch again or adjust filters.</div>
         ) : (
           <>
-            <div className="fetched-queue-toolbar">
-              <label className="queue-search-field">
-                <span>Search Fetched Conversations</span>
-                <input
-                  value={queueSearchText}
-                  onChange={(event) => setQueueSearchText(event.target.value)}
-                  placeholder="Conversation, agent, client, rating"
-                />
-              </label>
+            <div className="fetched-queue-toolbar upgraded">
+              <div className="queue-control-panel">
+                <label className="queue-filter-field wide">
+                  <span>Client / Conversation Search</span>
+                  <input
+                    value={queueSearchText}
+                    onChange={(event) => setQueueSearchText(event.target.value)}
+                    placeholder="Search conversation ID, client email, agent, employee, team, or rating"
+                  />
+                </label>
+
+                <label className="queue-filter-field">
+                  <span>Selection Status</span>
+                  <select value={queueSelectionFilter} onChange={(event) => setQueueSelectionFilter(event.target.value)}>
+                    {QUEUE_SELECTION_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="queue-filter-field">
+                  <span>Conversation Rating</span>
+                  <select value={queueRatingFilter} onChange={(event) => setQueueRatingFilter(event.target.value)}>
+                    <option value="all">All Ratings</option>
+                    {queueRatingFilterOptions.map((option) => (
+                      <option key={option.value || "blank-rating"} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="queue-filter-field">
+                  <span>Agent / Employee</span>
+                  <select value={queueAgentFilter} onChange={(event) => setQueueAgentFilter(event.target.value)}>
+                    <option value="all">All Agents & Employees</option>
+                    {queueAgentFilterOptions.map((option) => (
+                      <option key={`${option.value}-${option.helper}`} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="queue-filter-field">
+                  <span>Supervisor Team</span>
+                  <select value={queueSupervisorTeamFilter} onChange={(event) => setQueueSupervisorTeamFilter(event.target.value)}>
+                    <option value="all">All Supervisor Teams</option>
+                    {supervisorTeamFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="queue-filter-field">
+                  <span>Sort Queue</span>
+                  <select value={queueSortBy} onChange={(event) => setQueueSortBy(event.target.value)}>
+                    {QUEUE_SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="queue-filter-summary-row">
+                <div className="queue-filter-summary-card">
+                  <span>Current View</span>
+                  <strong>{formatNumber(filteredFetchedQueue.length)} of {formatNumber(fetchedConversations.length)}</strong>
+                  <small>Filtered conversations</small>
+                </div>
+                <div className="queue-filter-summary-card">
+                  <span>Selected In View</span>
+                  <strong>{formatNumber(selectedInFilteredQueueCount)}</strong>
+                  <small>{formatNumber(selectedQueueIds.length)} selected total</small>
+                </div>
+                <div className="queue-filter-summary-card">
+                  <span>Audit Queue</span>
+                  <strong>{formatNumber(queuedConversationCount)}</strong>
+                  <small>Limiter-aware count</small>
+                </div>
+              </div>
+
               <div className="queue-toolbar-actions">
-                <button type="button" className="secondary-btn" onClick={toggleAllVisibleQueueSelection}>
+                <button type="button" className="secondary-btn" onClick={toggleAllVisibleQueueSelection} disabled={!visibleFetchedQueue.length}>
                   {allVisibleQueueSelected ? "Clear Visible" : "Select Visible"}
+                </button>
+                <button type="button" className="secondary-btn" onClick={selectAllFilteredQueueRows} disabled={!filteredFetchedQueue.length}>
+                  Select Filtered
                 </button>
                 <button type="button" className="secondary-btn" onClick={() => setSelectedQueueIds([])} disabled={!selectedQueueIds.length}>
                   Clear Selection
+                </button>
+                <button type="button" className="secondary-btn" onClick={resetQueueFilters} disabled={!queueFiltersActive}>
+                  Reset Queue Filters
                 </button>
                 <button type="button" className="danger-btn" onClick={removeSelectedFromQueue} disabled={!selectedQueueIds.length || runLoading}>
                   Remove Selected
@@ -3752,13 +4065,17 @@ export default function RunPage() {
               </div>
             </div>
 
+            {filteredFetchedQueue.length === 0 ? (
+              <div className="empty-box">No queue rows match the current filters. Clear filters or broaden the search.</div>
+            ) : (
             <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead>
                   <tr>
                     <th><input className="queue-select" type="checkbox" checked={allVisibleQueueSelected} onChange={toggleAllVisibleQueueSelection} /></th>
                     <th>Conversation</th>
-                    <th>Agent</th>
+                    <th>Agent / Employee</th>
+                    <th>Supervisor Team</th>
                     <th>Client</th>
                     <th>Rating</th>
                     <th>Replied</th>
@@ -3768,14 +4085,19 @@ export default function RunPage() {
                 <tbody>
                   {visibleFetchedQueue.map((item, index) => {
                     const id = conversationIdOf(item);
+                    const identity = queueIdentityForItem(item, queueMappingByAgentKey);
+                    const supervisorLabels = queueSupervisorLabelsForItem(item, activeSupervisorTeams, identity);
+                    const supervisorLabel = supervisorLabels.length ? supervisorLabels.join(", ") : identity.teamName || "-";
+                    const rating = queueItemRating(item);
                     return (
                       <tr key={id || `queue-${index}`}>
                         <td><input className="queue-select" type="checkbox" checked={selectedQueueSet.has(id)} onChange={() => toggleQueueSelection(id)} /></td>
                         <td><strong>{id || "-"}</strong><small>Fetched from Intercom</small></td>
-                        <td>{item?.agentName || "Unassigned"}</td>
-                        <td>{item?.clientEmail || "-"}</td>
-                        <td>{item?.conversationRating || item?.csatScore || "-"}</td>
-                        <td>{formatClock(item?.repliedAt)}</td>
+                        <td><strong>{identity.agentName || "Unassigned"}</strong>{identity.employeeName && normalizeRunKey(identity.employeeName) !== normalizeRunKey(identity.agentName) ? <small>{identity.employeeName}</small> : null}</td>
+                        <td>{supervisorLabel}</td>
+                        <td>{queueItemClientEmail(item) || "-"}</td>
+                        <td>{rating || "-"}</td>
+                        <td>{formatClock(queueItemRepliedAt(item))}</td>
                         <td>
                           <div className="queue-action-cell">
                             <button type="button" className="queue-action-btn" onClick={() => setPreviewConversationId(id)} disabled={!id}>Preview</button>
@@ -3788,9 +4110,10 @@ export default function RunPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             <div className="queue-table-footer">
-              <span className="soft-copy">Showing {formatNumber(visibleFetchedQueue.length)} of {formatNumber(filteredFetchedQueue.length)} filtered conversation(s).</span>
+              <span className="soft-copy">Showing {formatNumber(visibleFetchedQueue.length)} of {formatNumber(filteredFetchedQueue.length)} filtered conversation(s). {queueFiltersActive ? "Queue filters are active." : "No queue filters active."}</span>
               {filteredFetchedQueue.length > 8 ? (
                 <button type="button" className="secondary-btn" onClick={() => setQueueExpanded((prev) => !prev)}>
                   {queueExpanded ? "Show Less" : `Show More (${formatNumber(filteredFetchedQueue.length - visibleFetchedQueue.length)} more)`}
@@ -6345,21 +6668,33 @@ const runStyles = `
     }
   }
   .fetched-queue-panel.compact-preview-panel { padding: 20px; }
-  .fetched-queue-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 14px; align-items: end; margin-bottom: 14px; }
-  .queue-search-field span { display: block; margin-bottom: 8px; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
-  .queue-search-field input { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.16); color: #e7ecff; background: rgba(5,8,18,.92); outline: none; }
+  .fetched-queue-toolbar.upgraded { display: grid; gap: 14px; margin-bottom: 14px; }
+  .queue-control-panel { display: grid; grid-template-columns: minmax(280px, 1.35fr) repeat(5, minmax(170px, 1fr)); gap: 12px; align-items: end; }
+  .queue-filter-field { min-width: 0; display: grid; gap: 8px; }
+  .queue-filter-field span { display: block; color: #8ea0d6; font-size: 13px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+  .queue-filter-field input, .queue-filter-field select { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.18); color: #e7ecff; background: #050812; outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+  .queue-filter-field select { cursor: pointer; appearance: auto; }
+  .queue-filter-field input:focus, .queue-filter-field select:focus { border-color: rgba(34,211,238,.48); box-shadow: 0 0 0 3px rgba(34,211,238,.09), inset 0 1px 0 rgba(255,255,255,.06); }
+  .queue-filter-summary-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .queue-filter-summary-card { min-height: 76px; padding: 13px 14px; border-radius: 18px; border: 1px solid rgba(148,163,184,.14); background: linear-gradient(135deg, rgba(15,23,42,.82), rgba(6,12,30,.94)); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+  .queue-filter-summary-card span, .queue-filter-summary-card small { display: block; color: #8ea0d6; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+  .queue-filter-summary-card strong { display: block; margin: 5px 0 3px; color: #f8fbff; font-size: 22px; line-height: 1.05; letter-spacing: -.03em; }
+  .queue-filter-summary-card small { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 760; }
   .queue-toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-  .queue-table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.35); max-height: 420px; }
-  .queue-table { width: 100%; border-collapse: collapse; min-width: 980px; }
-  .queue-table th, .queue-table td { padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,.1); text-align: left; vertical-align: top; }
-  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.86); font-size: 12px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
-  .queue-table td { color: #e7ecff; font-size: 15px; font-weight: 750; }
+  .queue-table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.35); max-height: 460px; }
+  .queue-table { width: 100%; border-collapse: collapse; min-width: 1160px; }
+  .queue-table th, .queue-table td { padding: 13px 14px; border-bottom: 1px solid rgba(148,163,184,.1); text-align: left; vertical-align: top; }
+  .queue-table th { color: #8ea0d6; background: rgba(15,23,42,.92); font-size: 12px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
+  .queue-table td { color: #e7ecff; font-size: 15px; font-weight: 750; line-height: 1.45; }
+  .queue-table td strong { display: block; color: #f8fbff; font-size: 15px; line-height: 1.35; }
   .queue-table small { display: block; margin-top: 4px; color: #8ea0d6; font-size: 13px; line-height: 1.4; }
   .queue-select { width: 18px; height: 18px; accent-color: #22d3ee; }
   .queue-action-cell { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .queue-action-btn { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.9); color: #e7ecff; font-size: 13px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .queue-action-btn { min-height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.9); color: #e7ecff; font-size: 13px; font-weight: 900; cursor: pointer; text-decoration: none; white-space: nowrap; }
   .queue-action-btn:hover { border-color: rgba(34,211,238,.45); background: rgba(14,165,233,.16); }
   .queue-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  @media (max-width: 1280px) { .queue-control-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .queue-filter-field.wide { grid-column: 1 / -1; } }
+  @media (max-width: 780px) { .queue-control-panel, .queue-filter-summary-row { grid-template-columns: 1fr; } .queue-toolbar-actions { justify-content: stretch; } }
   .ai-working-inline { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(148,163,184,.24); background: rgba(15,23,42,.78); color: #e5e7eb; font-size: 15px; font-weight: 900; box-shadow: 0 12px 34px rgba(0,0,0,.24); }
   .gear-loader { position: relative; width: 42px; height: 28px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   .gear-loader::before, .gear-loader::after { content: "⚙︎"; position: absolute; font-family: Arial, Helvetica, sans-serif; line-height: 1; color: #d1d5db; text-shadow: 0 8px 18px rgba(0,0,0,.48); animation: gearSpin 1.8s linear infinite; }
