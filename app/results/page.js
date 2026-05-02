@@ -223,46 +223,54 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
         ) : error ? (
           <div className="conversation-preview-error"><strong>Preview Not Available</strong><span>{error}</span><small>Open on Intercom to see this conversation.</small></div>
         ) : (
-          <>
-            <div className="conversation-preview-meta">
-              {infoCards.map((card) => (
-                <div key={card.label}><span>{card.label}</span><strong>{card.value}</strong></div>
-              ))}
-            </div>
-            {detailCards.length || tags.length ? (
-              <div className="conversation-preview-attributes">
-                {detailCards.map((card) => (
-                  <div key={card.label} className="attribute-card"><span>{card.label}</span><strong>{card.value}</strong></div>
+          <div className="conversation-preview-body">
+            <aside className="conversation-preview-sidebar">
+              <div className="conversation-preview-sidebar-title">
+                <span>Case Details</span>
+                <small>Audit and Intercom context</small>
+              </div>
+              <div className="conversation-preview-meta">
+                {infoCards.map((card) => (
+                  <div key={card.label}><span>{card.label}</span><strong>{card.value}</strong></div>
                 ))}
-                {tags.length ? (
-                  <div className="attribute-card tags-card">
-                    <span>Tags</span>
-                    <div className="conversation-preview-tags">
-                      {tags.map((tag) => <i key={tag}>{tag}</i>)}
+              </div>
+              {detailCards.length || tags.length ? (
+                <div className="conversation-preview-attributes">
+                  {detailCards.map((card) => (
+                    <div key={card.label} className="attribute-card"><span>{card.label}</span><strong>{card.value}</strong></div>
+                  ))}
+                  {tags.length ? (
+                    <div className="attribute-card tags-card">
+                      <span>Tags</span>
+                      <div className="conversation-preview-tags">
+                        {tags.map((tag) => <i key={tag}>{tag}</i>)}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            {mergedMetadata.aiVerdict ? (
-              <div className="conversation-preview-verdict">
-                <div className="conversation-preview-verdict-head">
-                  <span>AI Verdict Snapshot</span>
-                  <small>From the stored audit result</small>
+                  ) : null}
                 </div>
-                <pre>{mergedMetadata.aiVerdict}</pre>
+              ) : null}
+            </aside>
+            <section className="conversation-preview-main">
+              {mergedMetadata.aiVerdict ? (
+                <div className="conversation-preview-verdict">
+                  <div className="conversation-preview-verdict-head">
+                    <span>AI Verdict Snapshot</span>
+                    <small>From the stored audit result</small>
+                  </div>
+                  <pre>{mergedMetadata.aiVerdict}</pre>
+                </div>
+              ) : null}
+              <div className="conversation-transcript-list">
+                {messages.length ? messages.map((message) => (
+                  <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
+                    <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
+                    <p>{message.body || "Open on Intercom to see this message."}</p>
+                    {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
+                  </article>
+                )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
               </div>
-            ) : null}
-            <div className="conversation-transcript-list">
-              {messages.length ? messages.map((message) => (
-                <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
-                  <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
-                  <p>{message.body || "Open on Intercom to see this message."}</p>
-                  {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
-                </article>
-              )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
-            </div>
-          </>
+            </section>
+          </div>
         )}
       </div>
     </div>,
@@ -3590,44 +3598,203 @@ const resultsStyles = `
   .mini-verdict-btn { border-color: rgba(244, 114, 182, 0.3); background: linear-gradient(135deg, rgba(80, 7, 36, 0.95), rgba(157, 23, 77, 0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 26px rgba(131, 24, 67, 0.22); }
   .mini-verdict-btn:hover, .mini-verdict-btn.active { border-color: rgba(251, 207, 232, 0.55); background: linear-gradient(135deg, rgba(157, 23, 77, 0.96), rgba(236, 72, 153, 0.32)); }
   .preview-unavailable { color: #8ea0d6; font-size: 13px; font-weight: 800; }
-  .conversation-preview-backdrop { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: clamp(12px, 2vw, 28px); background: radial-gradient(circle at 18% 18%, rgba(59, 130, 246, 0.14), transparent 32%), radial-gradient(circle at 84% 20%, rgba(168, 85, 247, 0.16), transparent 30%), rgba(2, 6, 23, 0.82); backdrop-filter: blur(18px); }
-  .conversation-preview-modal { width: min(1560px, calc(100vw - 28px)); height: min(94dvh, 1060px); max-height: min(94dvh, 1060px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 32px; background: linear-gradient(180deg, rgba(16, 23, 43, 0.98) 0%, rgba(5, 9, 23, 0.99) 100%); box-shadow: 0 38px 130px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(96, 165, 250, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
-  .conversation-preview-head { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: clamp(18px, 2vw, 28px) clamp(20px, 2.2vw, 34px); border-bottom: 1px solid rgba(148, 163, 184, 0.14); background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.2)); }
-  .conversation-preview-head p { margin: 0 0 8px; color: #9fb5ff; font-size: 13px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
-  .conversation-preview-head h2 { margin: 0 0 7px; color: #ffffff; font-size: clamp(27px, 2vw, 38px); letter-spacing: -0.045em; line-height: 1.02; }
-  .conversation-preview-head span { color: #b8c4df; font-size: 16px; font-weight: 780; }
+  .conversation-preview-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 14px;
+    background:
+      radial-gradient(circle at 14% 18%, rgba(34, 211, 238, 0.08), transparent 24%),
+      radial-gradient(circle at 88% 12%, rgba(168, 85, 247, 0.12), transparent 26%),
+      rgba(2, 6, 23, 0.84);
+    backdrop-filter: blur(18px);
+  }
+  .conversation-preview-modal {
+    width: min(1900px, calc(100vw - 28px));
+    height: min(1120px, calc(100dvh - 28px));
+    max-height: calc(100dvh - 28px);
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 34px;
+    background:
+      radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.08), transparent 28%),
+      radial-gradient(circle at 86% 0%, rgba(139, 92, 246, 0.12), transparent 30%),
+      linear-gradient(180deg, rgba(16, 23, 43, 0.99) 0%, rgba(5, 9, 23, 0.99) 100%);
+    box-shadow:
+      0 42px 150px rgba(0, 0, 0, 0.82),
+      0 0 0 1px rgba(96, 165, 250, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  .conversation-preview-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 22px;
+    padding: 26px 30px 22px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.35));
+  }
+  .conversation-preview-head p { margin: 0 0 6px; color: #9fb5ff; font-size: 13px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
+  .conversation-preview-head h2 { margin: 0 0 7px; color: #ffffff; font-size: clamp(28px, 1.9vw, 40px); line-height: 1; letter-spacing: -0.05em; }
+  .conversation-preview-head span { color: #b7c4e5; font-size: 15.5px; font-weight: 800; }
   .conversation-preview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-  .conversation-preview-actions .secondary-btn { min-height: 42px; padding: 0 16px; border-radius: 14px; font-size: 14px; font-weight: 900; }
-  .conversation-preview-meta { flex: 0 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 18px clamp(20px, 2.2vw, 34px) 12px; border-bottom: 0; }
-  .conversation-preview-meta div, .conversation-preview-attributes .attribute-card { min-height: 74px; padding: 15px 16px; border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.13); background: linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.026)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035); overflow: hidden; }
-  .conversation-preview-meta span, .conversation-preview-meta strong, .conversation-preview-attributes span, .conversation-preview-attributes strong { display: block; }
-  .conversation-preview-meta span, .conversation-preview-attributes span { margin-bottom: 7px; color: #9fb5ff; font-size: 12px; font-weight: 950; letter-spacing: 0.13em; text-transform: uppercase; }
-  .conversation-preview-meta strong, .conversation-preview-attributes strong { color: #f8fbff; font-size: 15.5px; line-height: 1.45; overflow-wrap: anywhere; }
-  .conversation-preview-attributes { flex: 0 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; padding: 0 clamp(20px, 2.2vw, 34px) 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
-  .conversation-preview-attributes .tags-card { grid-column: span 2; }
+  .conversation-preview-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .conversation-preview-sidebar {
+    min-height: 0;
+    overflow: auto;
+    padding: 20px 18px 24px;
+    border-right: 1px solid rgba(148, 163, 184, 0.14);
+    background:
+      radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.08), transparent 32%),
+      linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(8, 13, 28, 0.92));
+  }
+  .conversation-preview-sidebar-title {
+    margin-bottom: 14px;
+    padding: 14px 14px 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    background: rgba(59, 130, 246, 0.08);
+  }
+  .conversation-preview-sidebar-title span,
+  .conversation-preview-sidebar-title small { display: block; }
+  .conversation-preview-sidebar-title span { color: #f8fbff; font-size: 17px; font-weight: 950; letter-spacing: -0.02em; }
+  .conversation-preview-sidebar-title small { margin-top: 4px; color: #9fb5ff; font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+  .conversation-preview-main {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.06), transparent 34%),
+      rgba(3, 7, 18, 0.2);
+  }
+  .conversation-preview-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .conversation-preview-meta div,
+  .conversation-preview-attributes .attribute-card {
+    min-height: 76px;
+    padding: 15px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.058), rgba(255, 255, 255, 0.026));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    overflow: hidden;
+  }
+  .conversation-preview-meta span,
+  .conversation-preview-meta strong,
+  .conversation-preview-attributes span,
+  .conversation-preview-attributes strong { display: block; }
+  .conversation-preview-meta span,
+  .conversation-preview-attributes span { margin-bottom: 7px; color: #9fb5ff; font-size: 12px; font-weight: 950; letter-spacing: 0.13em; text-transform: uppercase; }
+  .conversation-preview-meta strong,
+  .conversation-preview-attributes strong { color: #f8fbff; font-size: 15.5px; line-height: 1.45; overflow-wrap: anywhere; }
+  .conversation-preview-attributes {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px 0 0;
+    border-bottom: 0;
+  }
+  .conversation-preview-attributes .tags-card { grid-column: auto; }
   .conversation-preview-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-  .conversation-preview-tags i { padding: 7px 11px; border-radius: 999px; border: 1px solid rgba(96, 165, 250, 0.24); background: rgba(59, 130, 246, 0.15); color: #dbeafe; font-style: normal; font-size: 12.5px; font-weight: 850; }
-  .conversation-preview-verdict { flex: 0 0 auto; margin: 16px clamp(20px, 2.2vw, 34px) 0; padding: 17px 18px; border-radius: 22px; border: 1px solid rgba(244, 114, 182, 0.26); background: linear-gradient(135deg, rgba(76, 29, 149, 0.24), rgba(124, 58, 237, 0.1) 48%, rgba(236, 72, 153, 0.08)); box-shadow: 0 16px 48px rgba(76, 29, 149, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04); overflow: hidden; }
-  .conversation-preview-verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-  .conversation-preview-verdict-head span, .conversation-preview-verdict-head small { color: #f5d0fe; font-weight: 950; }
-  .conversation-preview-verdict-head span { font-size: 15px; letter-spacing: -0.01em; }
-  .conversation-preview-verdict-head small { color: #e9d5ff; font-size: 12.5px; opacity: 0.9; }
-  .conversation-preview-verdict pre { width: 100%; max-height: 118px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; color: #f8f3ff; font-size: 15px; line-height: 1.6; font-family: inherit; font-weight: 720; }
-  .conversation-transcript-list { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 22px clamp(20px, 2.2vw, 34px) 32px; display: grid; align-content: start; gap: 16px; scroll-behavior: smooth; }
-  .conversation-message { width: fit-content; max-width: min(980px, 88%); padding: 17px 19px; border-radius: 22px; border: 1px solid rgba(148, 163, 184, 0.14); background: rgba(15, 23, 42, 0.84); box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.035); }
-  .conversation-message.client { justify-self: start; border-color: rgba(59, 130, 246, 0.28); background: linear-gradient(135deg, rgba(30, 64, 175, 0.28), rgba(15, 23, 42, 0.86)); }
-  .conversation-message.agent { justify-self: end; border-color: rgba(16, 185, 129, 0.24); background: linear-gradient(135deg, rgba(6, 78, 59, 0.26), rgba(15, 23, 42, 0.86)); }
-  .conversation-message.system { justify-self: center; max-width: min(860px, 82%); background: rgba(255, 255, 255, 0.052); }
-  .conversation-message-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 10px; }
-  .conversation-message-top strong { color: #f8fbff; font-size: 16px; line-height: 1.25; }
-  .conversation-message-top span, .conversation-message small { color: #9fb5ff; font-size: 13px; font-weight: 850; }
-  .conversation-message p { margin: 0; color: #e8f0ff; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.72; font-size: 16px; font-weight: 620; }
-  .conversation-preview-loading, .conversation-preview-empty, .conversation-preview-error { margin: 22px clamp(20px, 2.2vw, 34px) 28px; padding: 24px; border-radius: 20px; border: 1px dashed rgba(148, 163, 184, 0.22); color: #dbe7ff; background: rgba(15, 23, 42, 0.72); }
-  .conversation-preview-error strong, .conversation-preview-error span, .conversation-preview-error small { display: block; }
+  .conversation-preview-tags i { padding: 7px 10px; border-radius: 999px; border: 1px solid rgba(96, 165, 250, 0.22); background: rgba(59, 130, 246, 0.14); color: #dbeafe; font-style: normal; font-size: 12px; font-weight: 850; }
+  .conversation-preview-verdict {
+    flex: 0 0 auto;
+    margin: 22px 26px 14px;
+    max-height: 190px;
+    overflow: auto;
+    padding: 18px 20px;
+    border-radius: 22px;
+    border: 1px solid rgba(244, 114, 182, 0.24);
+    background:
+      radial-gradient(circle at top left, rgba(236, 72, 153, 0.16), transparent 36%),
+      linear-gradient(180deg, rgba(76, 29, 149, 0.2), rgba(91, 33, 182, 0.09));
+    box-shadow: 0 18px 50px rgba(76, 29, 149, 0.18), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .conversation-preview-verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 11px; }
+  .conversation-preview-verdict-head span { color: #f5d0fe; font-size: 15px; font-weight: 950; }
+  .conversation-preview-verdict-head small { color: #fbcfe8; font-size: 12px; font-weight: 900; }
+  .conversation-preview-verdict pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    color: #fff7ff;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .conversation-transcript-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 30px 32px;
+    display: grid;
+    align-content: start;
+    gap: 18px;
+  }
+  .conversation-message {
+    max-width: min(980px, 78%);
+    padding: 18px 20px;
+    border-radius: 22px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(15, 23, 42, 0.86);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+  .conversation-message.client { justify-self: start; border-color: rgba(59, 130, 246, 0.28); background: linear-gradient(180deg, rgba(30, 64, 175, 0.33), rgba(30, 41, 59, 0.72)); }
+  .conversation-message.agent { justify-self: end; border-color: rgba(16, 185, 129, 0.22); background: linear-gradient(180deg, rgba(6, 95, 70, 0.3), rgba(15, 23, 42, 0.76)); }
+  .conversation-message.system { justify-self: center; max-width: min(760px, 70%); background: rgba(255, 255, 255, 0.052); }
+  .conversation-message-top { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+  .conversation-message-top strong { color: #f8fbff; font-size: 16px; font-weight: 950; }
+  .conversation-message-top span,
+  .conversation-message small { color: #9fb5ff; font-size: 13px; font-weight: 850; }
+  .conversation-message p { margin: 0; color: #e7efff; white-space: pre-wrap; line-height: 1.75; font-size: 16px; overflow-wrap: anywhere; }
+  .conversation-preview-loading,
+  .conversation-preview-empty,
+  .conversation-preview-error { margin: 24px 28px; padding: 24px; border-radius: 20px; border: 1px dashed rgba(148, 163, 184, 0.22); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
+  .conversation-preview-error strong,
+  .conversation-preview-error span,
+  .conversation-preview-error small { display: block; }
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
   .conversation-preview-error span { color: #f8fbff; margin-bottom: 6px; }
-  @media (max-width: 1180px) { .conversation-preview-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conversation-preview-attributes { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conversation-preview-attributes .tags-card { grid-column: span 2; } .conversation-message { max-width: 92%; } }
-  @media (max-width: 780px) { .conversation-preview-backdrop { padding: 10px; } .conversation-preview-modal { width: calc(100vw - 20px); height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); border-radius: 24px; } .conversation-preview-head, .conversation-preview-actions { flex-direction: column; align-items: stretch; } .conversation-preview-meta, .conversation-preview-attributes { grid-template-columns: 1fr; } .conversation-preview-attributes .tags-card { grid-column: auto; } .conversation-preview-verdict-head { align-items: flex-start; flex-direction: column; } .conversation-message, .conversation-message.system { max-width: 100%; } .conversation-transcript-list { min-height: 0; } }
+  @media (max-width: 1080px) {
+    .conversation-preview-modal { width: calc(100vw - 20px); height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); border-radius: 28px; }
+    .conversation-preview-body { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+    .conversation-message { max-width: 90%; }
+  }
+  @media (max-width: 780px) {
+    .conversation-preview-backdrop { padding: 8px; }
+    .conversation-preview-modal { width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); border-radius: 24px; }
+    .conversation-preview-head,
+    .conversation-preview-actions { flex-direction: column; align-items: stretch; }
+    .conversation-preview-body { grid-template-columns: 1fr; overflow: auto; }
+    .conversation-preview-sidebar { max-height: none; border-right: 0; border-bottom: 1px solid rgba(148, 163, 184, 0.14); }
+    .conversation-preview-main { min-height: 70dvh; overflow: visible; }
+    .conversation-preview-verdict { margin: 16px; }
+    .conversation-transcript-list { padding: 8px 16px 24px; overflow: visible; }
+    .conversation-message,
+    .conversation-message.system { max-width: 100%; }
+    .conversation-preview-verdict-head { align-items: flex-start; flex-direction: column; }
+  }
 
   .results-date-range-picker { position: relative; z-index: 35; }
   .results-date-range-picker.open { z-index: 9999; }
