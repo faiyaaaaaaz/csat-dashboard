@@ -187,11 +187,11 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
     { label: "Assigned Agent", value: mergedMetadata.assignedAgent || "Unassigned" },
     { label: "Rating", value: mergedMetadata.rating || "-" },
     { label: "Status", value: mergedMetadata.status || "-" },
-    { label: "Created", value: mergedMetadata.createdAt ? formatClock(mergedMetadata.createdAt) : "-" },
+    { label: "Created", value: mergedMetadata.createdAt ? formatDateTime(mergedMetadata.createdAt) : "-" },
     { label: "Review Approach", value: mergedMetadata.reviewApproach || "-" },
     { label: "Client", value: mergedMetadata.clientSentiment || "-" },
     { label: "Resolution", value: mergedMetadata.resolutionStatus || "-" },
-    { label: "Updated", value: mergedMetadata.updatedAt ? formatClock(mergedMetadata.updatedAt) : "-" },
+    { label: "Updated", value: mergedMetadata.updatedAt ? formatDateTime(mergedMetadata.updatedAt) : "-" },
   ];
   const detailCards = [
     { label: "Contact", value: mergedMetadata.contactName || mergedMetadata.clientEmail || "" },
@@ -256,7 +256,7 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
             <div className="conversation-transcript-list">
               {messages.length ? messages.map((message) => (
                 <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
-                  <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatClock(message.createdAt)}</span></div>
+                  <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
                   <p>{message.body || "Open on Intercom to see this message."}</p>
                   {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
                 </article>
