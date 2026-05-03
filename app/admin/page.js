@@ -163,6 +163,97 @@ function activityDateLabel(startDate, endDate, presetKey) {
   return `Until ${endDate}`;
 }
 
+function toActivityDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : normalizeToStartOfDay(date);
+}
+
+function shiftActivityMonths(date, months) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return normalizeToStartOfDay(next);
+}
+
+function activityMonthStart(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function activityMonthEnd(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function sameActivityDay(a, b) {
+  return a && b && formatDateInput(a) === formatDateInput(b);
+}
+
+function formatActivityMonthTitle(date) {
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function buildActivityCalendarDays(monthDate) {
+  const first = activityMonthStart(monthDate);
+  const last = activityMonthEnd(monthDate);
+  const days = [];
+  const startOffset = first.getDay();
+
+  for (let index = 0; index < startOffset; index += 1) {
+    const date = new Date(first);
+    date.setDate(first.getDate() - (startOffset - index));
+    days.push({ date, muted: true });
+  }
+
+  for (let day = 1; day <= last.getDate(); day += 1) {
+    days.push({ date: new Date(first.getFullYear(), first.getMonth(), day), muted: false });
+  }
+
+  while (days.length % 7 !== 0 || days.length < 42) {
+    const lastDate = days[days.length - 1].date;
+    const date = new Date(lastDate);
+    date.setDate(lastDate.getDate() + 1);
+    days.push({ date, muted: true });
+  }
+
+  return days;
+}
+
+function isActivityDateInDraftRange(date, draftStart, draftEnd) {
+  if (!draftStart || !draftEnd) return false;
+  const value = normalizeToStartOfDay(date).getTime();
+  return value >= normalizeToStartOfDay(draftStart).getTime() && value <= normalizeToStartOfDay(draftEnd).getTime();
+}
+
+function AdminActivityCalendarMonth({ monthDate, draftStart, draftEnd, onSelectDate }) {
+  const days = buildActivityCalendarDays(monthDate);
+
+  return (
+    <div className="admin-calendar-month-card">
+      <h4>{formatActivityMonthTitle(monthDate)}</h4>
+      <div className="admin-calendar-weekdays">
+        {["SU", "MO", "TU", "WE", "TH", "FR", "SA"].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="admin-calendar-day-grid">
+        {days.map(({ date, muted }) => {
+          const isStart = draftStart && sameActivityDay(date, draftStart);
+          const isEnd = draftEnd && sameActivityDay(date, draftEnd);
+          const inRange = isActivityDateInDraftRange(date, draftStart, draftEnd);
+
+          return (
+            <button
+              key={formatDateInput(date)}
+              type="button"
+              className={["admin-calendar-day", muted ? "muted" : "", inRange ? "in-range" : "", isStart ? "range-start" : "", isEnd ? "range-end" : ""].filter(Boolean).join(" ")}
+              onClick={() => onSelectDate(date)}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function formatActivityPath(path) {
   const text = normalizeText(path);
   if (!text) return "No path saved";
@@ -247,6 +338,17 @@ function safeJsonPreview(value) {
   }
 }
 
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 2V5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M16 2V5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M3.5 9H20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="3.5" y="4.5" width="17" height="16" rx="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 function HelpTip({ text }) {
   return (
     <span className="help-tip" tabIndex={0} aria-label={text}>
@@ -258,14 +360,18 @@ function HelpTip({ text }) {
 
 function AdminActivityDateRangePicker({ startDate, endDate, presetKey, onApplyPreset, onApplyCustom }) {
   const [open, setOpen] = useState(false);
-  const [draftStart, setDraftStart] = useState(startDate || "");
-  const [draftEnd, setDraftEnd] = useState(endDate || "");
+  const [draftStart, setDraftStart] = useState(() => toActivityDate(startDate));
+  const [draftEnd, setDraftEnd] = useState(() => toActivityDate(endDate));
+  const [visibleMonth, setVisibleMonth] = useState(() => activityMonthStart(toActivityDate(startDate) || new Date()));
   const wrapRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
-    setDraftStart(startDate || "");
-    setDraftEnd(endDate || "");
+    const nextStart = toActivityDate(startDate);
+    const nextEnd = toActivityDate(endDate);
+    setDraftStart(nextStart);
+    setDraftEnd(nextEnd);
+    setVisibleMonth(activityMonthStart(nextStart || new Date()));
   }, [open, startDate, endDate]);
 
   useEffect(() => {
@@ -282,47 +388,93 @@ function AdminActivityDateRangePicker({ startDate, endDate, presetKey, onApplyPr
     if (key !== "custom") setOpen(false);
   }
 
-  function applyCustom() {
-    onApplyCustom(draftStart, draftEnd);
+  function selectDate(date) {
+    const normalized = normalizeToStartOfDay(date);
+
+    if (!draftStart || (draftStart && draftEnd)) {
+      setDraftStart(normalized);
+      setDraftEnd(null);
+      return;
+    }
+
+    if (normalized < draftStart) {
+      setDraftEnd(draftStart);
+      setDraftStart(normalized);
+      return;
+    }
+
+    setDraftEnd(normalized);
+  }
+
+  function applyCustomRange() {
+    const safeStart = draftStart || draftEnd;
+    const safeEnd = draftEnd || draftStart;
+    if (!safeStart || !safeEnd) return;
+    onApplyCustom(formatDateInput(safeStart), formatDateInput(safeEnd));
     setOpen(false);
   }
 
+  const selectedPreset = ACTIVITY_DATE_PRESET_OPTIONS.find((item) => item.key === presetKey)?.label || "Custom";
+  const displayRange = activityDateLabel(startDate, endDate, presetKey);
+  const secondMonth = shiftActivityMonths(visibleMonth, 1);
+
   return (
-    <label className="admin-date-range-field" ref={wrapRef}>
-      <span>
-        Date Range
-        <HelpTip text="Choose the log date range before applying filters. For larger windows, increase the log limit too." />
-      </span>
-      <button type="button" className="admin-date-button" onClick={() => setOpen((prev) => !prev)}>
-        <strong>{ACTIVITY_DATE_PRESET_OPTIONS.find((item) => item.key === presetKey)?.label || "Custom"}</strong>
-        <small>{activityDateLabel(startDate, endDate, presetKey)}</small>
-        <b>{open ? "Up" : "Down"}</b>
-      </button>
+    <div className={open ? "admin-date-range-field open" : "admin-date-range-field"} ref={wrapRef}>
+      <label>
+        <span>
+          Date Range
+          <HelpTip text="Choose a preset or click two dates on the calendar. This controls which activity logs and sessions are loaded." />
+        </span>
+        <button type="button" className="admin-date-button" onClick={() => setOpen((prev) => !prev)}>
+          <strong><CalendarIcon /> {selectedPreset}</strong>
+          <small>{displayRange}</small>
+          <b>{open ? "Up" : "Down"}</b>
+        </button>
+      </label>
 
       {open ? (
         <div className="admin-date-popover">
-          <div className="admin-date-presets">
-            {ACTIVITY_DATE_PRESET_OPTIONS.map((item) => (
-              <button key={item.key} type="button" className={item.key === presetKey ? "active" : ""} onClick={() => applyPreset(item.key)}>
-                {item.label}
-              </button>
-            ))}
+          <div className="admin-date-popover-tabs">
+            <div>
+              <span>From</span>
+              <strong>{draftStart ? formatDateInput(draftStart) : "Choose Start"}</strong>
+            </div>
+            <div className={draftEnd ? "active" : ""}>
+              <span>To</span>
+              <strong>{draftEnd ? formatDateInput(draftEnd) : "Choose End"}</strong>
+            </div>
           </div>
 
-          <div className="admin-date-custom">
-            <label>
-              <span>Start</span>
-              <input type="date" value={draftStart} onChange={(event) => setDraftStart(event.target.value)} />
-            </label>
-            <label>
-              <span>End</span>
-              <input type="date" value={draftEnd} onChange={(event) => setDraftEnd(event.target.value)} />
-            </label>
-            <button type="button" className="primary-btn small-date-apply" onClick={applyCustom}>Apply Custom Range</button>
+          <div className="admin-date-popover-body">
+            <aside className="admin-date-preset-column">
+              {ACTIVITY_DATE_PRESET_OPTIONS.map((item) => (
+                <button key={item.key} type="button" className={item.key === presetKey ? "active" : ""} onClick={() => applyPreset(item.key)}>
+                  {item.label}
+                </button>
+              ))}
+            </aside>
+
+            <div className="admin-date-calendar-zone">
+              <div className="admin-calendar-nav-row">
+                <button type="button" onClick={() => setVisibleMonth((prev) => shiftActivityMonths(prev, -1))}>‹</button>
+                <strong>{formatActivityMonthTitle(visibleMonth)} - {formatActivityMonthTitle(secondMonth)}</strong>
+                <button type="button" onClick={() => setVisibleMonth((prev) => shiftActivityMonths(prev, 1))}>›</button>
+              </div>
+
+              <div className="admin-calendar-months-grid">
+                <AdminActivityCalendarMonth monthDate={visibleMonth} draftStart={draftStart} draftEnd={draftEnd} onSelectDate={selectDate} />
+                <AdminActivityCalendarMonth monthDate={secondMonth} draftStart={draftStart} draftEnd={draftEnd} onSelectDate={selectDate} />
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-date-popover-actions">
+            <button type="button" className="secondary-btn" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="primary-btn" onClick={applyCustomRange} disabled={!draftStart && !draftEnd}>Apply</button>
           </div>
         </div>
       ) : null}
-    </label>
+    </div>
   );
 }
 
@@ -5632,31 +5784,58 @@ const adminStyles = `
     opacity: 1;
   }
 
+  .admin-date-range-field {
+    position: relative;
+    grid-column: span 2;
+    z-index: 30;
+  }
+
+  .admin-date-range-field.open {
+    z-index: 9999;
+  }
+
+  .admin-date-range-field > label {
+    display: grid;
+    gap: 8px;
+  }
+
   .admin-date-button {
     width: 100%;
     min-height: 50px;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     padding: 0 14px;
     color: #e7ecff;
     border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 16px;
-    background: rgba(5, 8, 18, 0.9);
+    background: rgba(5, 8, 18, 0.94);
     cursor: pointer;
     text-align: left;
+    outline: none;
+  }
+
+  .admin-date-button:hover,
+  .admin-date-range-field.open .admin-date-button {
+    border-color: rgba(96, 165, 250, 0.28);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.1), 0 16px 34px rgba(15, 23, 42, 0.2);
   }
 
   .admin-date-button strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
     white-space: nowrap;
+    font-weight: 900;
   }
 
   .admin-date-button small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #9fb5ff;
+    color: #8ea0d6;
+    font-size: 14px;
     font-weight: 850;
   }
 
@@ -5669,78 +5848,189 @@ const adminStyles = `
     position: absolute;
     left: 0;
     top: calc(100% + 10px);
-    z-index: 20000;
-    width: min(620px, calc(100vw - 48px));
-    display: grid;
-    grid-template-columns: 190px minmax(0, 1fr);
-    gap: 12px;
-    padding: 12px;
+    z-index: 99999;
+    width: min(780px, calc(100vw - 48px));
+    overflow: hidden;
     border-radius: 22px;
-    border: 1px solid rgba(147, 197, 253, 0.28);
-    background: #070b1a;
-    box-shadow: 0 34px 100px rgba(0, 0, 0, 0.82), 0 0 0 1px rgba(59, 130, 246, 0.12);
-    isolation: isolate;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    background: #f8fafc;
+    color: #0f172a;
+    box-shadow: 0 34px 100px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.9);
   }
 
-  .admin-date-popover::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background:
-      radial-gradient(circle at top right, rgba(124, 58, 237, 0.18), transparent 34%),
-      linear-gradient(180deg, #0b1122 0%, #050814 100%);
-  }
-
-  .admin-date-presets {
-    display: grid;
-    gap: 7px;
-  }
-
-  .admin-date-presets button {
-    min-height: 38px;
-    border-radius: 13px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.035);
-    color: #dbe7ff;
-    font-weight: 900;
-    cursor: pointer;
-    text-align: left;
-    padding: 0 11px;
-  }
-
-  .admin-date-presets button.active,
-  .admin-date-presets button:hover {
-    border-color: rgba(96, 165, 250, 0.3);
-    background: rgba(59, 130, 246, 0.14);
-  }
-
-  .admin-date-custom {
+  .admin-date-popover-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    padding: 18px 20px 10px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+  }
+
+  .admin-date-popover-tabs div {
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+  }
+
+  .admin-date-popover-tabs div.active {
+    border-bottom-color: #15803d;
+    box-shadow: inset 0 -2px 0 #15803d;
+  }
+
+  .admin-date-popover-tabs span {
+    display: block;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .admin-date-popover-tabs strong,
+  .admin-calendar-nav-row strong,
+  .admin-calendar-month-card h4 {
+    color: #0f172a;
+  }
+
+  .admin-date-popover-body {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 20px;
+  }
+
+  .admin-date-preset-column {
+    display: grid;
     align-content: start;
+    gap: 8px;
   }
 
-  .admin-date-presets,
-  .admin-date-custom {
-    position: relative;
-    z-index: 1;
-    padding: 8px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(3, 7, 18, 0.96);
+  .admin-date-preset-column button,
+  .admin-calendar-nav-row button {
+    min-height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 850;
+    cursor: pointer;
   }
 
-  .admin-date-custom input[type="date"] {
-    color-scheme: dark;
-    background: #050917 !important;
+  .admin-date-preset-column button {
+    text-align: left;
+    padding: 0 12px;
   }
 
-  .small-date-apply {
-    grid-column: 1 / -1;
-    min-height: 42px;
+  .admin-date-preset-column button.active,
+  .admin-date-preset-column button:hover,
+  .admin-calendar-nav-row button:hover {
+    background: #dcfce7;
+    color: #14532d;
+    border-color: rgba(22, 163, 74, 0.28);
+  }
+
+  .admin-date-calendar-zone {
+    min-width: 0;
+  }
+
+  .admin-calendar-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .admin-calendar-nav-row button {
+    width: 42px;
+    font-size: 20px;
+  }
+
+  .admin-calendar-months-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .admin-calendar-month-card h4 {
+    margin: 0 0 10px;
+    text-align: center;
+    font-size: 17px;
+  }
+
+  .admin-calendar-weekdays,
+  .admin-calendar-day-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .admin-calendar-weekdays span {
+    color: #94a3b8;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .admin-calendar-day {
+    min-height: 34px;
+    border: 0;
+    border-radius: 10px;
+    color: #0f172a;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .admin-calendar-day:hover {
+    background: #e0f2fe;
+  }
+
+  .admin-calendar-day.muted {
+    color: #cbd5e1;
+  }
+
+  .admin-calendar-day.in-range {
+    background: #e8f5ec;
+  }
+
+  .admin-calendar-day.range-start,
+  .admin-calendar-day.range-end {
+    color: #ffffff;
+    border-radius: 999px;
+    background: #15803d;
+  }
+
+  .admin-date-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px 18px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+  }
+
+  .admin-date-popover-actions .secondary-btn {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+  }
+
+  .admin-date-popover-actions .primary-btn {
+    background: #15803d;
+    color: #ffffff;
+  }
+
+  @media (max-width: 820px) {
+    .admin-date-popover {
+      width: min(94vw, 540px);
+    }
+
+    .admin-date-popover-body,
+    .admin-calendar-months-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .activity-panel {
@@ -5802,11 +6092,6 @@ const adminStyles = `
     grid-template-columns: repeat(6, minmax(0, 1fr));
     margin-bottom: 16px;
     align-items: end;
-  }
-
-  .admin-date-range-field {
-    position: relative;
-    grid-column: span 2;
   }
 
   .activity-search-field {
@@ -6138,6 +6423,8 @@ const adminStyles = `
     .activity-filter-grid,
     .activity-detail-card,
     .admin-date-popover,
+    .admin-date-popover-body,
+    .admin-calendar-months-grid,
     .history-meta-grid,
     .mapping-area,
     .mapping-support-grid {
