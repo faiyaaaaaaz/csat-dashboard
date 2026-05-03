@@ -177,21 +177,64 @@ function formatActivityPath(path) {
     .join(" ");
 }
 
+function pagePathFromActivityDescription(description) {
+  const text = normalizeText(description);
+  if (!text) return "";
+
+  const match = text.match(/\b(?:viewed|opened)\s+(\/[^.\s]*)/i);
+  return normalizeText(match?.[1]);
+}
+
+function readablePageFromLog(row) {
+  const metadata = row && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {};
+  const savedPage = normalizeText(metadata.page || metadata.pathname || metadata.route || row?.target_id);
+  const targetLabel = normalizeText(row?.target_label);
+  const descriptionPage = pagePathFromActivityDescription(row?.description);
+
+  if (targetLabel && targetLabel !== "No direct target") return targetLabel;
+  if (savedPage) return formatActivityPath(savedPage);
+  if (descriptionPage) return formatActivityPath(descriptionPage);
+
+  const requestPath = normalizeText(row?.request_path);
+  if (requestPath === "/api/admin/activity-logs") return "App Session Tracker";
+  return formatActivityPath(requestPath);
+}
+
 function summarizeActivityLog(row) {
   const actor = normalizeText(row?.actor_name) || normalizeText(row?.actor_email) || "A user";
   const action = normalizeText(row?.action_type);
-  const pathLabel = formatActivityPath(row?.request_path);
+  const savedDescription = normalizeText(row?.description);
 
-  if (action === "page_viewed") return `${actor} opened ${pathLabel}.`;
+  if (action === "page_viewed") {
+    const pageLabel = readablePageFromLog(row);
+    if (pageLabel === "App Session Tracker") {
+      return `${actor} generated a navigation tracking event.`;
+    }
+    return `${actor} opened ${pageLabel}.`;
+  }
+
   if (action === "session_ended") return `${actor} signed out.`;
-  if (normalizeText(row?.description)) return row.description;
+  if (savedDescription) return savedDescription;
 
   const label = normalizeText(row?.action_label) || activityActionLabel(action);
   return `${actor} performed ${label}.`;
 }
 
 function summarizeActivityTarget(row) {
+  const action = normalizeText(row?.action_type);
+  if (action === "page_viewed") return readablePageFromLog(row);
   return normalizeText(row?.target_label) || normalizeText(row?.target_id) || normalizeText(row?.target_type) || "No direct target";
+}
+
+function activityTechnicalPath(row) {
+  const metadata = row && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {};
+  const savedPage = normalizeText(metadata.page || metadata.pathname || metadata.route || row?.target_id);
+  const requestPath = normalizeText(row?.request_path);
+
+  if (savedPage && requestPath) return `Page: ${savedPage} · Tracker API: ${requestPath}`;
+  if (savedPage) return `Page: ${savedPage}`;
+  if (requestPath) return `Tracker API: ${requestPath}`;
+  return "No path saved";
 }
 
 function safeJsonPreview(value) {
@@ -3562,7 +3605,7 @@ export default function AdminPage() {
             </article>
           </section>
 
-          <section className="control-grid">
+          <section className="control-grid mapping-support-grid">
             <article className="panel">
               <div className="section-head">
                 <div>
@@ -4428,6 +4471,26 @@ const adminStyles = `
     grid-template-columns: 1fr;
   }
 
+  .mapping-area,
+  .mapping-support-grid {
+    grid-template-columns: repeat(2, minmax(360px, 1fr));
+    align-items: stretch;
+  }
+
+  .mapping-area > .panel,
+  .mapping-support-grid > .panel {
+    width: 100%;
+    min-height: 420px;
+  }
+
+  .mapping-support-grid > .panel {
+    min-height: 330px;
+  }
+
+  .mapping-support-grid .rule-list {
+    max-width: 100%;
+  }
+
   .stat-card {
     position: relative;
     overflow: hidden;
@@ -4900,6 +4963,16 @@ const adminStyles = `
     margin-top: 8px;
     color: #a9b4d0;
     line-height: 1.5;
+  }
+
+  .scroll-stack {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .scroll-stack .mini-card {
+    width: 100%;
   }
 
   .empty-box {
@@ -5596,18 +5669,28 @@ const adminStyles = `
     position: absolute;
     left: 0;
     top: calc(100% + 10px);
-    z-index: 9000;
+    z-index: 20000;
     width: min(620px, calc(100vw - 48px));
     display: grid;
     grid-template-columns: 190px minmax(0, 1fr);
     gap: 12px;
     padding: 12px;
     border-radius: 22px;
-    border: 1px solid rgba(147, 197, 253, 0.24);
+    border: 1px solid rgba(147, 197, 253, 0.28);
+    background: #070b1a;
+    box-shadow: 0 34px 100px rgba(0, 0, 0, 0.82), 0 0 0 1px rgba(59, 130, 246, 0.12);
+    isolation: isolate;
+  }
+
+  .admin-date-popover::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
     background:
-      radial-gradient(circle at top right, rgba(124, 58, 237, 0.16), transparent 34%),
-      #0b1122;
-    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.72);
+      radial-gradient(circle at top right, rgba(124, 58, 237, 0.18), transparent 34%),
+      linear-gradient(180deg, #0b1122 0%, #050814 100%);
   }
 
   .admin-date-presets {
@@ -5640,12 +5723,28 @@ const adminStyles = `
     align-content: start;
   }
 
+  .admin-date-presets,
+  .admin-date-custom {
+    position: relative;
+    z-index: 1;
+    padding: 8px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(3, 7, 18, 0.96);
+  }
+
+  .admin-date-custom input[type="date"] {
+    color-scheme: dark;
+    background: #050917 !important;
+  }
+
   .small-date-apply {
     grid-column: 1 / -1;
     min-height: 42px;
   }
 
   .activity-panel {
+    overflow: visible;
     margin-bottom: 18px;
     background:
       radial-gradient(circle at 10% 0%, rgba(34, 211, 238, 0.08), transparent 30%),
@@ -5697,6 +5796,9 @@ const adminStyles = `
   }
 
   .activity-filter-grid {
+    position: relative;
+    z-index: 15;
+    overflow: visible;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     margin-bottom: 16px;
     align-items: end;
@@ -5725,6 +5827,8 @@ const adminStyles = `
   }
 
   .activity-table-shell {
+    position: relative;
+    z-index: 1;
     overflow: auto;
     max-height: 640px;
     border-radius: 22px;
@@ -6034,7 +6138,9 @@ const adminStyles = `
     .activity-filter-grid,
     .activity-detail-card,
     .admin-date-popover,
-    .history-meta-grid {
+    .history-meta-grid,
+    .mapping-area,
+    .mapping-support-grid {
       grid-template-columns: 1fr;
     }
 
