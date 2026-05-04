@@ -2385,15 +2385,14 @@ function DashboardLoadingScreen({ welcomeIdentity = null, showWelcome = false })
       <div className="dashboard-loading-stage">
         <div className="dashboard-loader-card">
           <div className="dashboard-loader-logo" aria-hidden="true">
-            <span className="dashboard-loader-halo" />
-            <span className="dashboard-loader-link link-a" />
-            <span className="dashboard-loader-link link-b" />
-            <span className="dashboard-loader-node node-a" />
-            <span className="dashboard-loader-node node-b" />
-            <span className="dashboard-loader-node node-c" />
+            <span className="dashboard-loader-glow" />
+            <span className="dashboard-loader-ring ring-one" />
+            <span className="dashboard-loader-ring ring-two" />
             <span className="dashboard-loader-gear gear-a">⚙</span>
             <span className="dashboard-loader-gear gear-b">⚙</span>
             <span className="dashboard-loader-gear gear-c">⚙</span>
+            <span className="dashboard-loader-dot dot-one" />
+            <span className="dashboard-loader-dot dot-two" />
           </div>
 
           <p>Dashboard Intelligence</p>
@@ -3354,7 +3353,7 @@ const dashboardStyles = `
   .dashboard-loader-logo,
   .dashboard-loader-card p,
   .dashboard-loader-card h1,
-  .dashboard-loader-card span,
+  .dashboard-loader-card > span,
   .dashboard-loader-bar {
     position: relative;
     z-index: 1;
@@ -3376,35 +3375,15 @@ const dashboardStyles = `
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 
-  .dashboard-loader-logo::before,
-  .dashboard-loader-logo::after {
-    content: "";
-    position: absolute;
-    pointer-events: none;
-    border-radius: 999px;
-    border: 1px solid rgba(125, 211, 252, 0.18);
-  }
-
-  .dashboard-loader-logo::before {
-    inset: 28px 26px 30px 20px;
-    animation: dashboardOrbitTilt 5.8s ease-in-out infinite;
-  }
-
-  .dashboard-loader-logo::after {
-    inset: 45px 18px 38px 42px;
-    border-color: rgba(244, 114, 182, 0.18);
-    animation: dashboardOrbitTiltReverse 4.8s ease-in-out infinite;
-  }
-
-  .dashboard-loader-halo,
-  .dashboard-loader-link,
-  .dashboard-loader-node,
-  .dashboard-loader-gear {
+  .dashboard-loader-glow,
+  .dashboard-loader-ring,
+  .dashboard-loader-gear,
+  .dashboard-loader-dot {
     position: absolute;
     pointer-events: none;
   }
 
-  .dashboard-loader-halo {
+  .dashboard-loader-glow {
     inset: 20px;
     border-radius: 34px;
     background: radial-gradient(circle, rgba(34, 211, 238, 0.14), rgba(139, 92, 246, 0.12), transparent 70%);
@@ -3412,53 +3391,20 @@ const dashboardStyles = `
     animation: dashboardGlowPulse 2.4s ease-in-out infinite;
   }
 
-  .dashboard-loader-link {
-    height: 4px;
+  .dashboard-loader-ring {
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(34, 211, 238, 0.78), rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.82));
-    box-shadow: 0 0 18px rgba(34, 211, 238, 0.34);
-    transform-origin: center;
+    border: 1px solid rgba(125, 211, 252, 0.18);
   }
 
-  .dashboard-loader-link.link-a {
-    left: 82px;
-    top: 94px;
-    width: 34px;
-    transform: rotate(-28deg);
+  .dashboard-loader-ring.ring-one {
+    inset: 28px 26px 30px 20px;
+    animation: dashboardOrbitTilt 5.8s ease-in-out infinite;
   }
 
-  .dashboard-loader-link.link-b {
-    left: 106px;
-    top: 116px;
-    width: 26px;
-    transform: rotate(42deg);
-  }
-
-  .dashboard-loader-node {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: #dbeafe;
-    box-shadow: 0 0 18px rgba(191, 219, 254, 0.74);
-  }
-
-  .dashboard-loader-node.node-a {
-    left: 86px;
-    top: 112px;
-  }
-
-  .dashboard-loader-node.node-b {
-    left: 118px;
-    top: 82px;
-    background: #7dd3fc;
-    box-shadow: 0 0 18px rgba(125, 211, 252, 0.8);
-  }
-
-  .dashboard-loader-node.node-c {
-    left: 120px;
-    top: 126px;
-    background: #f9a8d4;
-    box-shadow: 0 0 18px rgba(249, 168, 212, 0.8);
+  .dashboard-loader-ring.ring-two {
+    inset: 45px 18px 38px 42px;
+    border-color: rgba(244, 114, 182, 0.18);
+    animation: dashboardOrbitTiltReverse 4.8s ease-in-out infinite;
   }
 
   .dashboard-loader-gear {
@@ -3467,35 +3413,54 @@ const dashboardStyles = `
     justify-content: center;
     font-family: Arial, Helvetica, sans-serif;
     line-height: 1;
-    text-shadow: 0 12px 28px rgba(0, 0, 0, 0.48);
-    filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.18));
+    text-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
   }
 
   .dashboard-loader-gear.gear-a {
-    left: 42px;
-    top: 70px;
-    font-size: 82px;
+    left: 34px;
+    top: 60px;
     color: #8b5cf6;
+    font-size: 86px;
     filter: drop-shadow(0 0 18px rgba(139, 92, 246, 0.34));
     animation: dashboardGearSpin 5s linear infinite;
   }
 
   .dashboard-loader-gear.gear-b {
-    left: 82px;
-    top: 42px;
-    font-size: 74px;
+    left: 90px;
+    top: 30px;
     color: #38bdf8;
+    font-size: 76px;
     filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.32));
     animation: dashboardGearSpinReverse 4.2s linear infinite;
   }
 
   .dashboard-loader-gear.gear-c {
-    left: 92px;
-    top: 100px;
-    font-size: 50px;
+    left: 104px;
+    top: 104px;
     color: #ec4899;
+    font-size: 54px;
     filter: drop-shadow(0 0 18px rgba(236, 72, 153, 0.3));
     animation: dashboardGearSpin 3.3s linear infinite;
+  }
+
+  .dashboard-loader-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 18px currentColor;
+  }
+
+  .dashboard-loader-dot.dot-one {
+    top: 52px;
+    right: 50px;
+    color: #7dd3fc;
+  }
+
+  .dashboard-loader-dot.dot-two {
+    bottom: 50px;
+    right: 32px;
+    color: #f9a8d4;
   }
 
   .dashboard-loader-card p {
@@ -3515,7 +3480,7 @@ const dashboardStyles = `
     letter-spacing: -0.07em;
   }
 
-  .dashboard-loader-card span {
+  .dashboard-loader-card > span {
     max-width: 460px;
     color: #aebbe1;
     font-size: 17px;
