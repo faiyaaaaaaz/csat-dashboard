@@ -5137,7 +5137,7 @@ const runStyles = `
   }
 
   .audit-visual {
-    min-height: 88px;
+    min-height: 142px;
   }
 
   .mechanic-gear {
@@ -5145,49 +5145,53 @@ const runStyles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #d1d5db;
-    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.46));
   }
 
   .mechanic-gear::before {
-    content: "⚙︎";
+    content: "⚙";
     font-family: Arial, Helvetica, sans-serif;
     line-height: 1;
   }
 
   .gear-large {
-    left: calc(50% - 54px);
-    top: 15px;
-    font-size: 48px;
-    animation: mechanicSpin 2.6s linear infinite;
+    left: calc(50% - 64px);
+    top: 28px;
+    font-size: 68px;
+    color: #8b5cf6;
+    filter: drop-shadow(0 0 18px rgba(139, 92, 246, 0.34));
+    animation: mechanicSpin 5s linear infinite;
   }
 
   .gear-small {
     left: calc(50% - 8px);
-    top: 29px;
-    font-size: 34px;
-    color: #6b7280;
-    animation: mechanicSpinReverse 1.9s linear infinite;
+    top: 10px;
+    font-size: 60px;
+    color: #38bdf8;
+    filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.32));
+    animation: mechanicSpinReverse 4.2s linear infinite;
   }
 
   .gear-mid {
     left: calc(50% + 26px);
-    top: 20px;
-    font-size: 40px;
-    color: #9ca3af;
-    animation: mechanicSpin 2.2s linear infinite;
+    top: 72px;
+    font-size: 44px;
+    color: #ec4899;
+    filter: drop-shadow(0 0 18px rgba(236, 72, 153, 0.3));
+    animation: mechanicSpin 3.3s linear infinite;
   }
 
   .audit-spark {
     position: absolute;
     left: 50%;
-    bottom: 15px;
-    width: 92px;
-    height: 4px;
+    bottom: 10px;
+    width: 146px;
+    height: 5px;
     border-radius: 999px;
     transform: translateX(-50%);
-    background: linear-gradient(90deg, transparent, #9ca3af, transparent);
-    opacity: 0.65;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.78), rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.82), transparent);
+    opacity: 0.72;
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.28);
     animation: sparkPulse 1.8s ease-in-out infinite;
   }
 
