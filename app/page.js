@@ -3422,21 +3422,21 @@ const dashboardStyles = `
 
   .dashboard-loader-link.link-a {
     left: 82px;
-    top: 88px;
-    width: 42px;
-    transform: rotate(-10deg);
+    top: 94px;
+    width: 34px;
+    transform: rotate(-28deg);
   }
 
   .dashboard-loader-link.link-b {
-    left: 116px;
-    top: 112px;
-    width: 34px;
-    transform: rotate(34deg);
+    left: 106px;
+    top: 116px;
+    width: 26px;
+    transform: rotate(42deg);
   }
 
   .dashboard-loader-node {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
     background: #dbeafe;
     box-shadow: 0 0 18px rgba(191, 219, 254, 0.74);
@@ -3444,19 +3444,19 @@ const dashboardStyles = `
 
   .dashboard-loader-node.node-a {
     left: 86px;
-    top: 92px;
+    top: 112px;
   }
 
   .dashboard-loader-node.node-b {
     left: 118px;
-    top: 84px;
+    top: 82px;
     background: #7dd3fc;
     box-shadow: 0 0 18px rgba(125, 211, 252, 0.8);
   }
 
   .dashboard-loader-node.node-c {
-    left: 134px;
-    top: 118px;
+    left: 120px;
+    top: 126px;
     background: #f9a8d4;
     box-shadow: 0 0 18px rgba(249, 168, 212, 0.8);
   }
@@ -3472,9 +3472,9 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-gear.gear-a {
-    left: 38px;
-    top: 66px;
-    font-size: 86px;
+    left: 42px;
+    top: 70px;
+    font-size: 82px;
     color: #8b5cf6;
     filter: drop-shadow(0 0 18px rgba(139, 92, 246, 0.34));
     animation: dashboardGearSpin 5s linear infinite;
@@ -3482,17 +3482,17 @@ const dashboardStyles = `
 
   .dashboard-loader-gear.gear-b {
     left: 82px;
-    top: 54px;
-    font-size: 76px;
+    top: 42px;
+    font-size: 74px;
     color: #38bdf8;
     filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.32));
     animation: dashboardGearSpinReverse 4.2s linear infinite;
   }
 
   .dashboard-loader-gear.gear-c {
-    left: 110px;
-    top: 96px;
-    font-size: 54px;
+    left: 92px;
+    top: 100px;
+    font-size: 50px;
     color: #ec4899;
     filter: drop-shadow(0 0 18px rgba(236, 72, 153, 0.3));
     animation: dashboardGearSpin 3.3s linear infinite;
