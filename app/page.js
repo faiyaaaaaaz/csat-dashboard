@@ -1562,9 +1562,9 @@ function DateRangePicker({ filters, setFilters }) {
     return (
       <div className="calendar-month" key={monthLabel}>
         <h4>{monthLabel}</h4>
-        <div className="calendar-weekdays">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-            <span key={day}>{day}</span>
+        <div className="calendar-weekdays notranslate" translate="no">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+            <span key={day} className="notranslate" translate="no">{day}</span>
           ))}
         </div>
         <div className="calendar-grid-days">{cells}</div>
@@ -3400,17 +3400,17 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-link.link-a {
-    left: 38px;
-    top: 53px;
-    width: 70px;
-    transform: rotate(10deg);
+    left: 46px;
+    top: 61px;
+    width: 56px;
+    transform: rotate(20deg);
   }
 
   .dashboard-loader-link.link-b {
-    left: 58px;
-    top: 82px;
-    width: 54px;
-    transform: rotate(-38deg);
+    left: 72px;
+    top: 84px;
+    width: 48px;
+    transform: rotate(36deg);
   }
 
   .dashboard-loader-node {
@@ -3422,20 +3422,20 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-node.node-a {
-    left: 42px;
-    top: 50px;
+    left: 48px;
+    top: 56px;
   }
 
   .dashboard-loader-node.node-b {
-    left: 102px;
-    top: 61px;
+    left: 96px;
+    top: 73px;
     background: #c4b5fd;
     box-shadow: 0 0 18px rgba(196, 181, 253, 0.8);
   }
 
   .dashboard-loader-node.node-c {
-    left: 100px;
-    top: 101px;
+    left: 112px;
+    top: 103px;
     background: #f9a8d4;
     box-shadow: 0 0 18px rgba(249, 168, 212, 0.8);
   }
@@ -3451,25 +3451,25 @@ const dashboardStyles = `
   }
 
   .dashboard-loader-gear.gear-a {
-    left: 18px;
-    top: 22px;
-    font-size: 72px;
+    left: 24px;
+    top: 28px;
+    font-size: 68px;
     color: #dbeafe;
     animation: dashboardGearSpin 4.8s linear infinite;
   }
 
   .dashboard-loader-gear.gear-b {
     left: 72px;
-    top: 37px;
-    font-size: 54px;
+    top: 49px;
+    font-size: 50px;
     color: #c4b5fd;
     animation: dashboardGearSpinReverse 4s linear infinite;
   }
 
   .dashboard-loader-gear.gear-c {
-    left: 76px;
-    top: 82px;
-    font-size: 42px;
+    left: 100px;
+    top: 81px;
+    font-size: 38px;
     color: #f9a8d4;
     animation: dashboardGearSpin 3.4s linear infinite;
   }
@@ -5877,8 +5877,8 @@ const dashboardStyles = `
     color: #9aa8c7;
     font-size: 13px;
     font-weight: 950;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    text-transform: none;
   }
 
   .calendar-day {
