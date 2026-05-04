@@ -307,12 +307,27 @@ function PlatformLogo({ size = "normal" }) {
   );
 }
 
+function ConnectedLaunchGears() {
+  return (
+    <div className="launch-gear-visual" aria-hidden="true">
+      <span className="launch-gear-glow" />
+      <span className="launch-gear-ring ring-one" />
+      <span className="launch-gear-ring ring-two" />
+      <span className="launch-gear gear-one">⚙</span>
+      <span className="launch-gear gear-two">⚙</span>
+      <span className="launch-gear gear-three">⚙</span>
+      <span className="launch-gear-dot dot-one" />
+      <span className="launch-gear-dot dot-two" />
+    </div>
+  );
+}
+
 function LaunchScreen({ title = "Initializing Secure Workspace...", subtitle = "Checking Session And Preparing The Platform." }) {
   return (
     <div className="auth-stage">
       <div className="auth-bg-grid" />
       <div className="launch-card compact-launch">
-        <PlatformLogo size="large" />
+        <ConnectedLaunchGears />
         <h1>{title}</h1>
         <span>{subtitle}</span>
         <div className="launch-progress">
@@ -1088,6 +1103,100 @@ const appShellStyles = `
     text-align: center;
   }
 
+  .launch-gear-visual {
+    position: relative;
+    width: 190px;
+    height: 190px;
+    border-radius: 44px;
+    border: 1px solid rgba(147, 197, 253, 0.2);
+    background:
+      radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.2), transparent 20%),
+      linear-gradient(145deg, rgba(5, 12, 31, 0.98), rgba(15, 23, 42, 0.94));
+    box-shadow:
+      0 28px 74px rgba(15, 23, 42, 0.6),
+      0 0 46px rgba(34, 211, 238, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .launch-gear-glow,
+  .launch-gear-ring,
+  .launch-gear,
+  .launch-gear-dot {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .launch-gear-glow {
+    inset: 20px;
+    border-radius: 34px;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.14), rgba(139, 92, 246, 0.12), transparent 70%);
+    filter: blur(10px);
+    animation: launchGearGlowPulse 2.4s ease-in-out infinite;
+  }
+
+  .launch-gear-ring {
+    border-radius: 999px;
+    border: 1px solid rgba(125, 211, 252, 0.18);
+  }
+
+  .launch-gear-ring.ring-one {
+    inset: 28px 26px 30px 20px;
+    animation: launchGearOrbitTilt 5.8s ease-in-out infinite;
+  }
+
+  .launch-gear-ring.ring-two {
+    inset: 45px 18px 38px 42px;
+    border-color: rgba(244, 114, 182, 0.18);
+    animation: launchGearOrbitTiltReverse 4.8s ease-in-out infinite;
+  }
+
+  .launch-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1;
+    text-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .launch-gear.gear-one {
+    left: 34px;
+    top: 60px;
+    color: #8b5cf6;
+    font-size: 86px;
+    filter: drop-shadow(0 0 18px rgba(139, 92, 246, 0.34));
+    animation: launchGearSpin 5s linear infinite;
+  }
+
+  .launch-gear.gear-two {
+    left: 90px;
+    top: 30px;
+    color: #38bdf8;
+    font-size: 76px;
+    filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.32));
+    animation: launchGearSpinReverse 4.2s linear infinite;
+  }
+
+  .launch-gear.gear-three {
+    left: 104px;
+    top: 104px;
+    color: #ec4899;
+    font-size: 54px;
+    filter: drop-shadow(0 0 18px rgba(236, 72, 153, 0.3));
+    animation: launchGearSpin 3.3s linear infinite;
+  }
+
+  .launch-gear-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 18px currentColor;
+  }
+
+  .launch-gear-dot.dot-one { top: 52px; right: 50px; color: #7dd3fc; }
+  .launch-gear-dot.dot-two { bottom: 50px; right: 32px; color: #f9a8d4; }
+
   .launch-card p,
   .login-brand p,
   .login-copy span {
@@ -1264,6 +1373,12 @@ const appShellStyles = `
     font-size: 15px;
     line-height: 1.5;
   }
+
+  @keyframes launchGearSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes launchGearSpinReverse { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+  @keyframes launchGearGlowPulse { 0%, 100% { opacity: 0.72; transform: scale(0.96); } 50% { opacity: 1; transform: scale(1.04); } }
+  @keyframes launchGearOrbitTilt { 0%, 100% { transform: rotate(-10deg) scale(0.98); opacity: 0.58; } 50% { transform: rotate(9deg) scale(1.02); opacity: 0.92; } }
+  @keyframes launchGearOrbitTiltReverse { 0%, 100% { transform: rotate(16deg) scale(1.02); opacity: 0.58; } 50% { transform: rotate(-11deg) scale(0.98); opacity: 0.88; } }
 
   @keyframes progressSweep {
     0% { transform: translateX(-120%); }
