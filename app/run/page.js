@@ -100,6 +100,17 @@ function CheckIcon() {
   );
 }
 
+function HelpTip({ text }) {
+  if (!text) return null;
+
+  return (
+    <span className="run-help-tip" tabIndex={0} role="note" aria-label={text}>
+      <b>?</b>
+      <i>{text}</i>
+    </span>
+  );
+}
+
 function normalizeRunText(value) {
   return String(value ?? "").trim();
 }
@@ -220,12 +231,14 @@ function MultiSelectFilter({ label, options, selected, onChange, placeholder = "
   return (
     <div ref={ref} className={open ? "run-multi-filter open" : "run-multi-filter"}>
       <label>
-        <span>{label}</span>
+        <span className="label-with-tip">
+          {label}
+          <HelpTip text={helper} />
+        </span>
         <button type="button" className="run-multi-button" onClick={() => setOpen((prev) => !prev)}>
           <strong>{buttonLabel}</strong>
           <b>{open ? "Up" : "Down"}</b>
         </button>
-        {helper ? <small>{helper}</small> : null}
       </label>
 
       {open ? (
@@ -330,7 +343,7 @@ function RunDateRangePicker({ startDate, endDate, selectedDatePreset, selectedPr
   return (
     <div className={open ? "run-date-range-picker open" : "run-date-range-picker"} ref={ref}>
       <label>
-        <span>Date Range</span>
+        <span className="label-with-tip">Date Range <HelpTip text="Filters conversations by conversation date for the audit fetch. This does not use the later rating submission date." /></span>
         <button type="button" className="run-date-button" onClick={() => setOpen((prev) => !prev)}>
           <strong><CalendarIcon /> {selectedPresetLabel}</strong>
           <small>{displayRange}</small>
@@ -1320,6 +1333,45 @@ export default function RunPage() {
     () => getQueuedConversations(fetchedConversations).length,
     [fetchedConversations, limiterEnabled, limitCount]
   );
+
+  const runReadinessItems = [
+    {
+      label: "Session",
+      value: authLoading ? "Checking" : canRunTests ? "Allowed" : "Locked",
+      helper: session?.user?.email || "Sign in required",
+      tone: canRunTests ? "success" : authLoading ? "notice" : "danger",
+    },
+    {
+      label: "Date Range",
+      value: startDate && endDate ? selectedPresetLabel : "Not Selected",
+      helper: startDate && endDate ? `${startDate} to ${endDate}` : "Choose a range before fetching",
+      tone: startDate && endDate ? "success" : "warning",
+    },
+    {
+      label: "Fetch Scope",
+      value: selectedFilterSummary.supervisorTeams,
+      helper: `${selectedFilterSummary.conversationRatings} · ${selectedFilterSummary.employees}`,
+      tone: "notice",
+    },
+    {
+      label: "Queue",
+      value: queuedConversationCount ? `${formatNumber(queuedConversationCount)} Ready` : "Waiting",
+      helper: `${formatNumber(fetchedConversations.length)} fetched from Intercom`,
+      tone: queuedConversationCount ? "success" : "neutral",
+    },
+    {
+      label: "Duplicate Handling",
+      value: duplicateWarningOpen ? "Decision Needed" : autoRunAfterFetch ? "Auto Decision" : "Ask Before Audit",
+      helper: autoRunAfterFetch ? "Auto-Run applies the safe duplicate rule" : "Manual runs pause only if duplicates are found",
+      tone: duplicateWarningOpen ? "warning" : "neutral",
+    },
+    {
+      label: "Audit Engine",
+      value: runLoading ? "Running" : runData?.meta?.auditedCount ? "Completed" : "Ready",
+      helper: runLoading ? auditProgress.detail : `${formatNumber(runData?.meta?.auditedCount || 0)} saved result row(s)`,
+      tone: runLoading ? "notice" : runData?.meta?.auditedCount ? "success" : "neutral",
+    },
+  ];
 
   function addLog(message, tone = "info") {
     const now = new Date();
@@ -3341,322 +3393,254 @@ export default function RunPage() {
         </div>
       </section>
 
-      <section className="surface-card quick-run-panel">
-        <div className="quick-run-copy">
-          <span className="mini-label">Quick Actions</span>
-          <strong>{queuedConversationCount ? `${formatNumber(queuedConversationCount)} Ready For Audit` : "Ready To Fetch"}</strong>
-          <small>{startDate && endDate ? `${startDate} to ${endDate}` : "Choose an audit range first"} · {selectedFilterSummary.conversationRatings} · {selectedFilterSummary.employees}</small>
+      <section className="surface-card audit-command-panel">
+        <div className="audit-command-head">
+          <div>
+            <span className="mini-label">Audit Command Center</span>
+            <h2>Configure, Fetch, and Run</h2>
+            <p>Set the audit range and filters once, then run the workflow from one controlled command bar.</p>
+          </div>
+          <div className="audit-command-status">
+            <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
+            <small>{autoRunAfterFetch ? "Auto-Run is enabled" : "Manual audit start"}</small>
+          </div>
         </div>
 
-        <div className="quick-run-metrics">
-          <div><span>Fetched</span><strong>{formatNumber(fetchedConversations.length)}</strong></div>
-          <div><span>Queued</span><strong>{formatNumber(queuedConversationCount)}</strong></div>
-          <div><span>Saved</span><strong>{formatNumber(runData?.meta?.auditedCount || 0)}</strong></div>
-        </div>
+        <div className="audit-command-grid">
+          <div className="audit-command-control date-control-wide">
+            <RunDateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              selectedDatePreset={selectedDatePreset}
+              selectedPresetLabel={selectedPresetLabel}
+              onApplyPreset={applyDatePreset}
+              onApplyCustom={applyCustomDateRange}
+            />
+          </div>
 
-        <div className="quick-run-actions">
-          {!fetchLoading ? (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={handleFetchConversations}
-              disabled={!canRunTests || !session?.user || !startDate || !endDate || runLoading}
-            >
-              Fetch Conversations
-            </button>
-          ) : (
-            <button type="button" className="danger-btn" onClick={handleCancelFetch}>
-              Cancel Fetch
-            </button>
-          )}
+          <div className="audit-command-control">
+            <MultiSelectFilter
+              label="Conversation Rating"
+              options={SCORE_FILTER_OPTIONS}
+              selected={conversationRatings}
+              onChange={(value) => {
+                setConversationRatings(value);
+                resetRunStateForInputChange();
+              }}
+              placeholder="Any Rating"
+              helper="Default: 3, 4, and 5. Clear the selection to fetch any rating."
+            />
+          </div>
 
-          {!runLoading ? (
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={handleRunAudit}
-              disabled={fetchLoading || !fetchedConversations.length}
-            >
-              Run Audit
-            </button>
-          ) : (
-            <button type="button" className="danger-btn" onClick={handleCancelAudit}>
-              Cancel Audit
-            </button>
-          )}
-        </div>
-      </section>
+          <div className="audit-command-control">
+            <MultiSelectFilter
+              label="Supervisor Team"
+              options={supervisorTeamFilterOptions}
+              selected={selectedSupervisorTeamIds}
+              onChange={applySupervisorTeamFilterSelection}
+              placeholder="All Supervisor Teams"
+              helper="Selecting Supervisor Teams automatically includes their mapped employees and Intercom agents."
+            />
+          </div>
 
-      <section className="command-grid">
-        <div className="surface-card command-card">
-          <div className="section-head">
+          <div className="audit-command-control">
+            <MultiSelectFilter
+              label="Employee"
+              options={employeeFilterOptions}
+              selected={selectedEmployeeNames}
+              onChange={applyEmployeeFilterSelection}
+              placeholder="All Employees"
+              helper="Employees come from active Admin Agent Mappings. Selecting employees auto-selects matching Intercom agents."
+            />
+          </div>
+
+          <div className="audit-command-control">
+            <MultiSelectFilter
+              label="Intercom Agent"
+              options={intercomAgentFilterOptions}
+              selected={selectedIntercomAgentNames}
+              onChange={applyIntercomAgentFilterSelection}
+              placeholder="All Intercom Agents"
+              helper="Selecting Intercom agents updates the matching Employee filter."
+            />
+          </div>
+
+          <div className="audit-command-toggle">
             <div>
-              <span className="mini-label">Command Center</span>
-              <h2>Setup and Controls</h2>
+              <span className="mini-label inline-label">Limiter <HelpTip text="When enabled, only the selected number of fetched conversations is included in the audit queue. When disabled, all eligible fetched conversations are queued." /></span>
+              <strong>{limiterEnabled ? "Enabled" : "Disabled"}</strong>
             </div>
             <button
               type="button"
-              className={autoRunAfterFetch ? "toggle-chip on" : "toggle-chip"}
-              onClick={toggleAutoRun}
+              className={limiterEnabled ? "switch on" : "switch"}
+              onClick={() => {
+                setLimiterEnabled((prev) => !prev);
+                resetRunStateForInputChange();
+              }}
+              aria-label="Toggle limiter"
             >
               <span />
-              {autoRunAfterFetch ? "Auto-Run enabled" : "Auto-Run after fetch"}
+            </button>
+            {limiterEnabled ? (
+              <label className="compact-limit-field">
+                <span>Conversation Limit</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={limitCount}
+                  onChange={(event) => {
+                    setLimitCount(event.target.value);
+                    resetRunStateForInputChange();
+                  }}
+                  placeholder="Enter number"
+                />
+              </label>
+            ) : null}
+          </div>
+
+          <div
+            className={autoRunAfterFetch ? "audit-command-toggle auto active" : "audit-command-toggle auto"}
+            role="button"
+            tabIndex={0}
+            onClick={toggleAutoRun}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleAutoRun();
+              }
+            }}
+          >
+            <div>
+              <span className="mini-label inline-label">Auto-Run <HelpTip text="When enabled, the audit starts automatically after fetching completes. When disabled, you review the queue before pressing Run Audit." /></span>
+              <strong>{autoRunAfterFetch ? "Enabled" : "Disabled"}</strong>
+            </div>
+            <button
+              type="button"
+              className={autoRunAfterFetch ? "switch on" : "switch"}
+              aria-label="Toggle auto-run after fetch"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleAutoRun();
+              }}
+            >
+              <span />
             </button>
           </div>
 
-          <div className="auth-shell-card">
+          <div className="audit-command-actions">
+            {!fetchLoading ? (
+              <button
+                type="button"
+                className="primary-btn fetch-main-btn"
+                onClick={handleFetchConversations}
+                disabled={!canRunTests || !session?.user || !startDate || !endDate || runLoading}
+              >
+                Fetch Conversations
+              </button>
+            ) : (
+              <button type="button" className="danger-btn fetch-main-btn" onClick={handleCancelFetch}>
+                Cancel Fetch
+              </button>
+            )}
+
+            {!runLoading ? (
+              <button
+                type="button"
+                className="secondary-btn run-main-btn"
+                onClick={handleRunAudit}
+                disabled={fetchLoading || !fetchedConversations.length}
+              >
+                Run Audit
+              </button>
+            ) : (
+              <button type="button" className="danger-btn run-main-btn" onClick={handleCancelAudit}>
+                Cancel Audit
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="run-setup-strip">
+          <div><span>Date Range</span><strong>{startDate && endDate ? `${startDate} to ${endDate}` : "Not selected"}</strong></div>
+          <div><span>Ratings</span><strong>{selectedFilterSummary.conversationRatings}</strong></div>
+          <div><span>Supervisor Scope</span><strong>{selectedFilterSummary.supervisorTeams}</strong></div>
+          <div><span>Employees</span><strong>{selectedFilterSummary.employees}</strong></div>
+          <div><span>Intercom Agents</span><strong>{selectedFilterSummary.agents}</strong></div>
+          <div><span>Queue</span><strong>{formatNumber(queuedConversationCount)} ready</strong></div>
+        </div>
+
+        {(fetchError || fetchSuccess || runError || runSuccess || authMessage || mappingFilterError || mappingFilterLoading) ? (
+          <div className="message-stack command-message-stack">
+            {authMessage ? <div className="message error subtle">{authMessage}</div> : null}
+            {mappingFilterLoading ? <div className="message subtle">Loading active Agent Mappings...</div> : null}
+            {mappingFilterError ? <div className="message error subtle">{mappingFilterError}</div> : null}
+            {fetchError ? <div className="message error">{fetchError}</div> : null}
+            {fetchSuccess ? <div className="message success">{fetchSuccess}</div> : null}
+            {runError ? <div className="message error">{runError}</div> : null}
+            {runSuccess ? <div className="message success">{runSuccess}</div> : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="command-grid">
+        <div className="surface-card command-card readiness-card-shell">
+          <div className="section-head">
             <div>
-              <span className="mini-label">Session</span>
-              <strong>
-                {authLoading ? "Checking session" : session?.user?.email || "Not signed in"}
-              </strong>
-              <small>
-                {authLoading
-                  ? "Please wait"
-                  : canRunTests
-                  ? "This account can run audits"
-                  : "This account cannot run audits"}
-              </small>
+              <span className="mini-label">Run Readiness</span>
+              <h2>Workflow Transparency</h2>
+              <p className="soft-copy">Verify the current setup, queue health, and audit state before processing.</p>
             </div>
             <div className={`access-badge ${canRunTests ? "success" : "danger"}`}>
               {canRunTests ? "Allowed" : "Locked"}
             </div>
           </div>
 
-          {authMessage ? <div className="message error subtle">{authMessage}</div> : null}
-
-          <div className="control-section-grid">
-            <div className="control-block">
-              <div className="block-head">
-                <span className="mini-label">Step 1</span>
-                <h3>Choose the Audit Range</h3>
-              </div>
-
-              <RunDateRangePicker
-                startDate={startDate}
-                endDate={endDate}
-                selectedDatePreset={selectedDatePreset}
-                selectedPresetLabel={selectedPresetLabel}
-                onApplyPreset={applyDatePreset}
-                onApplyCustom={applyCustomDateRange}
-              />
+          <div className="auth-shell-card refined">
+            <div>
+              <span className="mini-label">Session</span>
+              <strong>{authLoading ? "Checking Session" : session?.user?.email || "Not Signed In"}</strong>
+              <small>{canRunTests ? "This account can run audits." : "This account cannot run audits."}</small>
             </div>
-
-            <div className="control-block filter-control-block">
-              <div className="block-head">
-                <span className="mini-label">Step 2</span>
-                <h3>Choose Fetch Filters</h3>
-                <small>These filters control which Intercom conversations are fetched before the GPT audit starts.</small>
-              </div>
-
-              <div className="filter-control-grid">
-                <MultiSelectFilter
-                  label="Conversation Rating"
-                  options={SCORE_FILTER_OPTIONS}
-                  selected={conversationRatings}
-                  onChange={(value) => {
-                    setConversationRatings(value);
-                    resetRunStateForInputChange();
-                  }}
-                  placeholder="Any Rating"
-                  helper="Default: 3, 4, and 5. Clear selection to fetch any rating."
-                />
-                <MultiSelectFilter
-                  label="Supervisor Team"
-                  options={supervisorTeamFilterOptions}
-                  selected={selectedSupervisorTeamIds}
-                  onChange={applySupervisorTeamFilterSelection}
-                  placeholder="All Supervisor Teams"
-                  helper="Selecting one or more Supervisor Teams auto-selects their mapped employees and Intercom agents."
-                />
-                <MultiSelectFilter
-                  label="Employee"
-                  options={employeeFilterOptions}
-                  selected={selectedEmployeeNames}
-                  onChange={applyEmployeeFilterSelection}
-                  placeholder="All Employees"
-                  helper="Pulled from active Admin Agent Mappings. Selecting employees auto-selects their Intercom agents."
-                />
-                <MultiSelectFilter
-                  label="Intercom Agent"
-                  options={intercomAgentFilterOptions}
-                  selected={selectedIntercomAgentNames}
-                  onChange={applyIntercomAgentFilterSelection}
-                  placeholder="All Intercom Agents"
-                  helper="Selecting Intercom agents updates the matching Employee filter."
-                />
-              </div>
-
-              <div className="filter-summary-grid">
-                <div><span>Conversation Rating</span><strong>{selectedFilterSummary.conversationRatings}</strong></div>
-                <div><span>Supervisor Teams</span><strong>{selectedFilterSummary.supervisorTeams}</strong></div>
-                <div><span>Employees</span><strong>{selectedFilterSummary.employees}</strong></div>
-                <div><span>Intercom Agents</span><strong>{selectedFilterSummary.agents}</strong></div>
-              </div>
-
-              {mappingFilterLoading ? <div className="message subtle">Loading active Agent Mappings...</div> : null}
-              {mappingFilterError ? <div className="message error subtle">{mappingFilterError}</div> : null}
-            </div>
-
-            <div className="control-block">
-              <div className="block-head">
-                <span className="mini-label">Step 3</span>
-                <h3>Set Run Behavior</h3>
-              </div>
-
-
-              <div className="behavior-grid">
-                <div className="behavior-card">
-                  <div className="behavior-row">
-                    <div>
-                      <span className="mini-label">Limiter</span>
-                      <strong>{limiterEnabled ? "Enabled" : "Disabled"}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      className={limiterEnabled ? "switch on" : "switch"}
-                      onClick={() => {
-                        setLimiterEnabled((prev) => !prev);
-                        resetRunStateForInputChange();
-                      }}
-                    >
-                      <span />
-                    </button>
-                  </div>
-
-                  {limiterEnabled ? (
-                    <label>
-                      <span>Conversation Limit</span>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={limitCount}
-                        onChange={(event) => {
-                          setLimitCount(event.target.value);
-                          resetRunStateForInputChange();
-                        }}
-                        placeholder="Enter number"
-                      />
-                    </label>
-                  ) : (
-                    <small className="behavior-copy">
-                      All eligible conversations in the selected range will be fetched.
-                    </small>
-                  )}
-                </div>
-
-                <div
-                  className={autoRunAfterFetch ? "behavior-card interactive active" : "behavior-card interactive"}
-                  role="button"
-                  tabIndex={0}
-                  onClick={toggleAutoRun}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      toggleAutoRun();
-                    }
-                  }}
-                >
-                  <div className="behavior-row">
-                    <div>
-                      <span className="mini-label">Auto-Run</span>
-                      <strong>{autoRunAfterFetch ? "Enabled" : "Disabled"}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      className={autoRunAfterFetch ? "switch on" : "switch"}
-                      aria-label="Toggle auto-run after fetch"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleAutoRun();
-                      }}
-                    >
-                      <span />
-                    </button>
-                  </div>
-
-                  <small className="behavior-copy">
-                    Click this card to turn auto-run on or off. When enabled, the audit starts automatically after fetch.
-                  </small>
-                </div>
-              </div>
-            </div>
-
-            <div className="control-block action-block">
-              <div className="block-head">
-                <span className="mini-label">Step 4</span>
-                <h3>Run the Workflow</h3>
-              </div>
-
-              <div className="action-summary-grid">
-                <div>
-                  <span className="mini-label">Fetched Queue</span>
-                  <strong>{formatNumber(fetchedConversations.length)}</strong>
-                </div>
-                <div>
-                  <span className="mini-label">Audit Queue</span>
-                  <strong>{formatNumber(queuedConversationCount)}</strong>
-                </div>
-                <div>
-                  <span className="mini-label">Duplicate Handling</span>
-                  <strong>
-                    {duplicateWarningOpen
-                      ? "Decision needed"
-                      : autoRunAfterFetch
-                      ? "Auto decision"
-                      : "Ask before audit"}
-                  </strong>
-                  <small>
-                    {autoRunAfterFetch
-                      ? "Auto-Run applies the safe duplicate rule."
-                      : "Manual runs pause only if duplicates are found."}
-                  </small>
-                </div>
-              </div>
-
-              <div className="button-row large">
-                {!fetchLoading ? (
-                  <button
-                    type="button"
-                    className="primary-btn"
-                    onClick={handleFetchConversations}
-                    disabled={!canRunTests || !session?.user || !startDate || !endDate || runLoading}
-                  >
-                    Fetch Conversations
-                  </button>
-                ) : (
-                  <button type="button" className="danger-btn" onClick={handleCancelFetch}>
-                    Cancel Fetch
-                  </button>
-                )}
-
-                {!runLoading ? (
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={handleRunAudit}
-                    disabled={fetchLoading || !fetchedConversations.length}
-                  >
-                    Run Audit
-                  </button>
-                ) : (
-                  <button type="button" className="danger-btn" onClick={handleCancelAudit}>
-                    Cancel Audit
-                  </button>
-                )}
-              </div>
-            </div>
+            <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
           </div>
 
-          {(fetchError || fetchSuccess || runError || runSuccess) ? (
-            <div className="message-stack">
-              {fetchError ? <div className="message error">{fetchError}</div> : null}
-              {fetchSuccess ? <div className="message success">{fetchSuccess}</div> : null}
-              {runError ? <div className="message error">{runError}</div> : null}
-              {runSuccess ? <div className="message success">{runSuccess}</div> : null}
-            </div>
-          ) : null}
+          <div className="run-readiness-grid">
+            {runReadinessItems.map((item) => (
+              <div key={item.label} className={`readiness-card ${item.tone}`}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.helper}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="workflow-stack compact-readiness-stack">
+            <WorkflowStep
+              number="1"
+              title="Setup"
+              body={startDate && endDate ? `Date range is ready: ${startDate} to ${endDate}.` : "Choose a date range before fetching."}
+              status={workflowStatus.setup}
+            />
+            <WorkflowStep
+              number="2"
+              title="Fetch"
+              body={fetchData?.meta?.fetchedCount ? `${formatNumber(fetchData.meta.fetchedCount)} conversation(s) fetched from Intercom.` : "Fetch Conversations will build the audit queue."}
+              status={workflowStatus.fetch}
+            />
+            <WorkflowStep
+              number="3"
+              title="Review Queue"
+              body={queuedConversationCount ? `${formatNumber(queuedConversationCount)} conversation(s) are ready for audit.` : "Review fetched conversations before starting the audit."}
+              status={workflowStatus.review}
+            />
+            <WorkflowStep
+              number="4"
+              title="Audit"
+              body={runData?.meta?.auditedCount ? `${formatNumber(runData.meta.auditedCount)} result row(s) returned in the latest run.` : "Run Audit will process the selected queue in safe batches."}
+              status={workflowStatus.run}
+            />
+          </div>
         </div>
 
         <div className="monitor-column">
@@ -4058,7 +4042,8 @@ const runStyles = `
   .command-grid,
   .surface-card,
   .diagnostics-panel,
-  .quick-run-panel {
+  .quick-run-panel,
+  .audit-command-panel {
     width: 100%;
     max-width: none;
     margin-left: 0;
@@ -4116,7 +4101,8 @@ const runStyles = `
   .log-panel,
   .preview-panel,
   .output-panel,
-  .diagnostics-panel {
+  .diagnostics-panel,
+  .audit-command-panel {
     border-radius: 30px;
   }
 
@@ -4493,6 +4479,17 @@ const runStyles = `
   .diagnostics-panel {
     padding: 24px;
     margin-bottom: 18px;
+  }
+
+  .audit-command-panel {
+    position: relative;
+    overflow: visible;
+    padding: clamp(18px, 2.1vw, 28px);
+    margin: 0 0 18px;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.14), transparent 30%),
+      radial-gradient(circle at 100% 0%, rgba(168, 85, 247, 0.16), transparent 32%),
+      linear-gradient(135deg, rgba(18, 28, 55, 0.96), rgba(18, 20, 45, 0.96) 48%, rgba(31, 25, 66, 0.92));
   }
 
   .monitor-column {
@@ -6216,6 +6213,280 @@ const runStyles = `
   .date-popover-actions .ghost-btn { background: #ffffff !important; color: #0f172a !important; border: 1px solid rgba(15, 23, 42, 0.1) !important; }
   .primary-btn.light { background: #15803d !important; color: #ffffff !important; }
 
+  .audit-command-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+
+  .audit-command-head h2 {
+    font-size: clamp(28px, 2.6vw, 42px);
+    line-height: 1;
+    letter-spacing: -0.055em;
+  }
+
+  .audit-command-head p,
+  .soft-copy {
+    margin: 8px 0 0;
+    color: #b8c4dd;
+    font-size: 16px;
+    line-height: 1.6;
+    font-weight: 700;
+  }
+
+  .audit-command-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .audit-command-status small {
+    color: #a9b4d0;
+    font-size: 14px;
+    font-weight: 850;
+  }
+
+  .audit-command-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.3fr) repeat(4, minmax(190px, 1fr)) minmax(210px, 0.9fr) minmax(210px, 0.9fr) minmax(260px, 0.95fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .audit-command-control,
+  .audit-command-toggle,
+  .audit-command-actions {
+    position: relative;
+    min-width: 0;
+    padding: 13px;
+    border-radius: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.56), rgba(15, 23, 42, 0.44));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    overflow: visible;
+  }
+
+  .audit-command-control:has(.run-multi-filter.open),
+  .audit-command-control:has(.run-date-range-picker.open) {
+    z-index: 9000;
+  }
+
+  .audit-command-toggle {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .audit-command-toggle.auto {
+    cursor: pointer;
+  }
+
+  .audit-command-toggle.auto.active {
+    border-color: rgba(16, 185, 129, 0.26);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.15), transparent 42%),
+      linear-gradient(180deg, rgba(21, 60, 60, 0.58), rgba(15, 23, 42, 0.48));
+  }
+
+  .audit-command-toggle strong {
+    display: block;
+    color: #ffffff;
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .compact-limit-field {
+    grid-column: 1 / -1;
+  }
+
+  .compact-limit-field input {
+    min-height: 42px;
+    border-radius: 14px;
+  }
+
+  .audit-command-actions {
+    display: grid;
+    gap: 10px;
+    align-content: stretch;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.17), transparent 40%),
+      linear-gradient(180deg, rgba(23, 31, 57, 0.74), rgba(14, 18, 38, 0.7));
+  }
+
+  .audit-command-actions .primary-btn,
+  .audit-command-actions .secondary-btn,
+  .audit-command-actions .danger-btn {
+    width: 100%;
+    min-height: 52px;
+    font-size: 16px;
+  }
+
+  .fetch-main-btn {
+    background: linear-gradient(135deg, #0891b2, #2563eb, #7c3aed);
+  }
+
+  .run-main-btn {
+    color: #fff;
+    border-color: rgba(217, 70, 239, 0.26);
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.84), rgba(219, 39, 119, 0.86));
+    box-shadow: 0 18px 30px rgba(124, 58, 237, 0.22);
+  }
+
+  .run-setup-strip {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .run-setup-strip div,
+  .readiness-card {
+    min-width: 0;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.075);
+    background: rgba(2, 6, 23, 0.32);
+  }
+
+  .run-setup-strip span,
+  .readiness-card span {
+    display: block;
+    color: #8ea0d6;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .run-setup-strip strong,
+  .readiness-card strong {
+    display: block;
+    color: #f8fbff;
+    font-size: 15px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .readiness-card small {
+    display: block;
+    margin-top: 6px;
+    color: #a9b4d0;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 750;
+  }
+
+  .readiness-card.success {
+    border-color: rgba(16, 185, 129, 0.22);
+    background: rgba(16, 185, 129, 0.07);
+  }
+
+  .readiness-card.notice {
+    border-color: rgba(59, 130, 246, 0.2);
+    background: rgba(59, 130, 246, 0.07);
+  }
+
+  .readiness-card.warning {
+    border-color: rgba(245, 158, 11, 0.2);
+    background: rgba(245, 158, 11, 0.07);
+  }
+
+  .readiness-card.danger {
+    border-color: rgba(244, 63, 94, 0.22);
+    background: rgba(244, 63, 94, 0.07);
+  }
+
+  .command-message-stack {
+    margin-top: 14px;
+  }
+
+  .readiness-card-shell {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.1), transparent 32%),
+      linear-gradient(180deg, rgba(16, 24, 46, 0.82), rgba(8, 12, 26, 0.9));
+  }
+
+  .auth-shell-card.refined {
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .run-readiness-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .compact-readiness-stack {
+    gap: 10px;
+  }
+
+  .label-with-tip,
+  .inline-label {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .run-help-tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(125, 211, 252, 0.4);
+    background: rgba(14, 165, 233, 0.14);
+    color: #bfdbfe;
+    font: inherit;
+    cursor: help;
+    z-index: 20;
+    flex: 0 0 auto;
+  }
+
+  .run-help-tip b {
+    display: block;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 950;
+  }
+
+  .run-help-tip i {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    width: min(320px, 72vw);
+    transform: translateX(-50%) translateY(4px);
+    opacity: 0;
+    pointer-events: none;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(125, 211, 252, 0.24);
+    background: #06101f;
+    color: #dbeafe;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+    font-size: 13px;
+    line-height: 1.45;
+    font-style: normal;
+    font-weight: 800;
+    letter-spacing: normal;
+    text-transform: none;
+    z-index: 100000;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .run-help-tip:hover i,
+  .run-help-tip:focus i {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
   .monitor-column > .surface-card {
     width: 100%;
     box-sizing: border-box;
@@ -6330,11 +6601,33 @@ const runStyles = `
     min-height: 44px;
   }
 
+  @media (max-width: 1540px) {
+    .audit-command-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .date-control-wide {
+      grid-column: span 2;
+    }
+
+    .audit-command-actions {
+      grid-column: span 2;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .run-setup-strip {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   @media (max-width: 1280px) {
     .hero-grid,
     .command-grid,
     .run-intro-strip,
     .quick-run-panel,
+    .audit-command-head,
+    .audit-command-grid,
+    .run-setup-strip,
     .control-section-grid {
       grid-template-columns: 1fr;
     }
@@ -6349,6 +6642,21 @@ const runStyles = `
     .hero-side-column,
     .monitor-column {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1180px) {
+    .audit-command-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .date-control-wide,
+    .audit-command-actions {
+      grid-column: span 2;
+    }
+
+    .run-readiness-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -6394,7 +6702,10 @@ const runStyles = `
     .action-summary-grid,
     .progress-metrics-grid,
     .modal-note-grid,
-    .form-grid.two {
+    .form-grid.two,
+    .audit-command-grid,
+    .run-setup-strip,
+    .run-readiness-grid {
       grid-template-columns: 1fr;
     }
 
