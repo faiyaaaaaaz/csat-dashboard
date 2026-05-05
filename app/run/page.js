@@ -3583,7 +3583,7 @@ export default function RunPage() {
         ) : null}
       </section>
 
-      <section className="command-grid">
+      <section className="command-grid run-live-grid">
         <div className="surface-card command-card readiness-card-shell">
           <div className="section-head">
             <div>
@@ -3643,132 +3643,68 @@ export default function RunPage() {
           </div>
         </div>
 
-        <div className="monitor-column">
-          <div className="surface-card monitor-card">
-            <div className="section-head compact alt">
-              <div>
-                <span className="mini-label">Live Monitor</span>
-                <h2>Progress and System Feedback</h2>
-              </div>
-              <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
+        <div className="surface-card monitor-card">
+        <div className="section-head compact alt">
+          <div>
+              <span className="mini-label">Live Monitor</span>
+              <h2>Progress and System Feedback</h2>
             </div>
+            <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
+          </div>
 
-            {fetchLoading ? (
+          {fetchLoading ? (
+            <ProgressPanel
+              type="Fetch progress"
+              label={FETCH_STEPS[fetchStepIndex] || "Fetching"}
+              detail="Fetching and hydrating Intercom conversations that match the selected filters."
+              percent={Math.min(96, ((fetchStepIndex + 1) / FETCH_STEPS.length) * 100)}
+              elapsed={formatElapsed(fetchStartedAt)}
+              handled={0}
+              total={0}
+              batchIndex={0}
+              totalBatches={0}
+              savedRows={0}
+              skippedRows={0}
+              failedRows={0}
+              onCancel={handleCancelFetch}
+            />
+          ) : null}
+
+          {runLoading ? (
+            <>
+            <div className="ai-working-inline"><span className="gear-loader" /> AI audit engine is working through the selected queue.</div>
               <ProgressPanel
-                type="Fetch progress"
-                label={FETCH_STEPS[fetchStepIndex] || "Fetching"}
-                detail="Fetching and hydrating Intercom conversations that match the selected filters."
-                percent={Math.min(96, ((fetchStepIndex + 1) / FETCH_STEPS.length) * 100)}
-                elapsed={formatElapsed(fetchStartedAt)}
-                handled={0}
-                total={0}
-                batchIndex={0}
-                totalBatches={0}
-                savedRows={0}
-                skippedRows={0}
-                failedRows={0}
-                onCancel={handleCancelFetch}
-              />
-            ) : null}
+              type="Audit progress"
+              label={auditProgress.label}
+              detail={auditProgress.detail}
+              percent={auditProgress.percent}
+              elapsed={formatElapsed(runStartedAt)}
+              handled={auditProgress.handled}
+              total={auditProgress.total}
+              batchIndex={auditProgress.batchIndex}
+              totalBatches={auditProgress.totalBatches}
+              savedRows={auditProgress.savedRows}
+              skippedRows={auditProgress.skippedRows}
+              failedRows={auditProgress.failedRows}
+              onCancel={handleCancelAudit}
+            />
+            </>
+          ) : null}
 
-            {runLoading ? (
-              <>
-                <div className="ai-working-inline"><span className="gear-loader" /> AI audit engine is working through the selected queue.</div>
-                <ProgressPanel
-                type="Audit progress"
-                label={auditProgress.label}
-                detail={auditProgress.detail}
-                percent={auditProgress.percent}
-                elapsed={formatElapsed(runStartedAt)}
-                handled={auditProgress.handled}
-                total={auditProgress.total}
-                batchIndex={auditProgress.batchIndex}
-                totalBatches={auditProgress.totalBatches}
-                savedRows={auditProgress.savedRows}
-                skippedRows={auditProgress.skippedRows}
-                failedRows={auditProgress.failedRows}
-                onCancel={handleCancelAudit}
-              />
-              </>
-            ) : null}
-
-            {!fetchLoading && !runLoading ? (
-              <div className="resting-panel">
-                <div className="resting-icon-wrap">
-                  <SparklesIcon />
-                </div>
-                <div>
-                  <strong>{operationLabel}</strong>
-                  <p>{summaryText}</p>
-                </div>
+          {!fetchLoading && !runLoading ? (
+          <div className="resting-panel">
+            <div className="resting-icon-wrap">
+                <SparklesIcon />
               </div>
-            ) : null}
-          </div>
-
-          <div className="surface-card run-summary-card">
-            <div className="section-head compact alt">
-              <div>
-                <span className="mini-label">Run Summary</span>
-                <h2>At a Glance</h2>
+            <div>
+                <strong>{operationLabel}</strong>
+                <p>{summaryText}</p>
               </div>
             </div>
-
-            <div className="mini-grid polished">
-              <div>
-                <span>Fetched</span>
-                <strong>{formatNumber(fetchData?.meta?.fetchedCount || 0)}</strong>
-              </div>
-              <div>
-                <span>Queued</span>
-                <strong>{formatNumber(queuedConversationCount || 0)}</strong>
-              </div>
-              <div>
-                <span>Handled</span>
-                <strong>{formatNumber(runData?.meta?.handledCount || 0)}</strong>
-              </div>
-              <div>
-                <span>Saved</span>
-                <strong>{formatNumber(runData?.meta?.auditedCount || 0)}</strong>
-              </div>
-              <div>
-                <span>Skipped</span>
-                <strong>{formatNumber(runData?.meta?.skippedCount || 0)}</strong>
-              </div>
-              <div>
-                <span>Errors</span>
-                <strong>{formatNumber(errorCount || 0)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="surface-card log-panel">
-            <div className="section-head compact alt">
-              <div>
-                <span className="mini-label">Execution log</span>
-                <h2>Recent Activity</h2>
-              </div>
-              <button type="button" className="ghost-btn small" onClick={() => setExecutionLog([])}>
-                Clear log
-              </button>
-            </div>
-
-            {executionLog.length ? (
-              <div className="log-list">
-                {executionLog.map((item) => (
-                  <div key={item.id} className={`log-item ${item.tone}`}>
-                    <span>{item.time}</span>
-                    <strong>{item.message}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-box small">No activity yet.</div>
-            )}
-          </div>
+          ) : null}
         </div>
-      </section>
 
-      <section className="stats-grid compact-run-stats">
+      <section className="stats-grid compact-run-stats inline-run-stats">
         {statCards.map((card) => (
           <article key={card.label} className={`stat-card ${card.tone}`}>
             <p>{card.label}</p>
@@ -3776,6 +3712,68 @@ export default function RunPage() {
             <span>{card.subtext}</span>
           </article>
         ))}
+      </section>
+
+        <div className="surface-card run-summary-card">
+        <div className="section-head compact alt">
+          <div>
+              <span className="mini-label">Run Summary</span>
+              <h2>At a Glance</h2>
+            </div>
+          </div>
+
+        <div className="mini-grid polished">
+          <div>
+              <span>Fetched</span>
+              <strong>{formatNumber(fetchData?.meta?.fetchedCount || 0)}</strong>
+            </div>
+          <div>
+              <span>Queued</span>
+              <strong>{formatNumber(queuedConversationCount || 0)}</strong>
+            </div>
+          <div>
+              <span>Handled</span>
+              <strong>{formatNumber(runData?.meta?.handledCount || 0)}</strong>
+            </div>
+          <div>
+              <span>Saved</span>
+              <strong>{formatNumber(runData?.meta?.auditedCount || 0)}</strong>
+            </div>
+          <div>
+              <span>Skipped</span>
+              <strong>{formatNumber(runData?.meta?.skippedCount || 0)}</strong>
+            </div>
+          <div>
+              <span>Errors</span>
+              <strong>{formatNumber(errorCount || 0)}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="surface-card log-panel">
+        <div className="section-head compact alt">
+          <div>
+              <span className="mini-label">Execution log</span>
+              <h2>Recent Activity</h2>
+            </div>
+            <button type="button" className="ghost-btn small" onClick={() => setExecutionLog([])}>
+              Clear log
+            </button>
+          </div>
+
+          {executionLog.length ? (
+          <div className="log-list">
+              {executionLog.map((item) => (
+              <div key={item.id} className={`log-item ${item.tone}`}>
+                  <span>{item.time}</span>
+                  <strong>{item.message}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+          <div className="empty-box small">No activity yet.</div>
+          )}
+        </div>
       </section>
 
       <section className="surface-card preview-panel fetched-queue-panel compact-preview-panel">
@@ -4468,6 +4466,31 @@ const runStyles = `
     gap: 18px;
     margin-bottom: 18px;
     align-items: start;
+  }
+
+  .run-live-grid {
+    grid-template-columns: minmax(620px, 1fr) minmax(560px, 1fr);
+    align-items: stretch;
+  }
+
+  .run-live-grid > .surface-card,
+  .run-live-grid > .stats-grid {
+    margin-bottom: 0;
+  }
+
+  .run-live-grid .log-panel {
+    grid-column: 1 / -1;
+  }
+
+  .inline-run-stats {
+    margin: 0;
+    align-self: stretch;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .inline-run-stats .stat-card {
+    min-height: 132px;
   }
 
   .command-card,
@@ -6623,6 +6646,7 @@ const runStyles = `
   @media (max-width: 1280px) {
     .hero-grid,
     .command-grid,
+    .run-live-grid,
     .run-intro-strip,
     .quick-run-panel,
     .audit-command-head,
@@ -6661,7 +6685,7 @@ const runStyles = `
   }
 
   @media (max-width: 1080px) {
-    .stats-grid,
+    .stats-grid:not(.inline-run-stats),
     .hero-quick-grid,
     .filter-control-grid,
     .filter-summary-grid,
@@ -6682,6 +6706,10 @@ const runStyles = `
   }
 
   @media (max-width: 780px) {
+    .inline-run-stats {
+      grid-template-columns: 1fr;
+    }
+
     .run-page {
       padding-left: 12px;
       padding-right: 12px;
