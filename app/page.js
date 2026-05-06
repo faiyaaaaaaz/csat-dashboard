@@ -2082,11 +2082,9 @@ function DetailModal({
       <div className="drill-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <p>Chart Drill In</p>
+            <p>Drill In</p>
             <h2>{title}</h2>
-            <span>
-              {value} · {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} Conversation(s)
-            </span>
+            <span>{value} · {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} Conversation(s)</span>
           </div>
 
           <div className="modal-actions">
@@ -2936,7 +2934,7 @@ export default function DashboardPage() {
                 help="Shows the emotional tone of clients in the selected conversations, from Very Positive to Very Negative."
                 onDrill={() => openDetail("Client Sentiment Drill In", "All Client Sentiments", filteredRows, globalFilters)}
               >
-                <DonutChart
+                <HorizontalBarChart
                   entries={clientEntries}
                   total={filteredRows.length}
                   kind="client"
@@ -2958,7 +2956,7 @@ export default function DashboardPage() {
                 help="Shows whether the selected conversations were Resolved, Pending, Unclear, or Unresolved."
                 onDrill={() => openDetail("Resolution Drill In", "All Resolution Statuses", filteredRows, globalFilters)}
               >
-                <DonutChart
+                <HorizontalBarChart
                   entries={resolutionEntries}
                   total={filteredRows.length}
                   kind="resolution"
@@ -2988,7 +2986,7 @@ export default function DashboardPage() {
                   )
                 }
               >
-                <HorizontalBarChart
+                <DonutChart
                   entries={missedClientEntries}
                   total={missedRows.length}
                   kind="client"
@@ -3019,7 +3017,7 @@ export default function DashboardPage() {
                   )
                 }
               >
-                <HorizontalBarChart
+                <DonutChart
                   entries={missedResolutionEntries}
                   total={missedRows.length}
                   kind="resolution"
@@ -6365,6 +6363,316 @@ const dashboardStyles = `
   .overview-feature-grid .donut-layout,
   .sentiment-resolution-grid .donut-layout {
     align-items: center;
+  }
+
+
+  /* Dashboard density and drill-in visibility pass: layout-only overrides. */
+  .dashboard-page {
+    font-size: 16px;
+  }
+
+  .dashboard-shell {
+    width: min(1680px, calc(100vw - 28px));
+  }
+
+  .hero-panel.slim-hero,
+  .filter-panel,
+  .kpi-grid,
+  .insight-strip,
+  .overview-feature-grid,
+  .sentiment-resolution-grid,
+  .breakdown-grid {
+    max-width: none;
+  }
+
+  .hero-panel.compact-hero.slim-hero {
+    padding: 24px 26px;
+    margin-bottom: 16px;
+  }
+
+  .filter-panel {
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+
+  .filter-row.first,
+  .filter-row.second {
+    gap: 12px;
+  }
+
+  .kpi-grid {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .kpi-card {
+    min-height: 118px;
+    padding: 17px 18px;
+  }
+
+  .kpi-card strong {
+    font-size: clamp(31px, 2.1vw, 42px);
+  }
+
+  .insight-strip {
+    margin-bottom: 14px;
+  }
+
+  .overview-feature-grid {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .overview-feature-grid .chart-card.large,
+  .sentiment-resolution-grid .chart-card.large,
+  .breakdown-grid .chart-card {
+    min-height: 380px;
+  }
+
+  .sentiment-resolution-grid,
+  .breakdown-grid {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .chart-card {
+    padding: 20px;
+  }
+
+  .chart-head {
+    margin-bottom: 14px;
+  }
+
+  .chart-head h3 {
+    font-size: clamp(23px, 1.45vw, 31px);
+  }
+
+  .chart-head p {
+    font-size: 14px;
+  }
+
+  .sentiment-resolution-grid .bar-list {
+    gap: 12px;
+  }
+
+  .sentiment-resolution-grid .bar-item {
+    padding: 13px 14px;
+    min-height: 56px;
+  }
+
+  .sentiment-resolution-grid .bar-track {
+    height: 12px;
+  }
+
+  .breakdown-grid .donut-layout {
+    grid-template-columns: minmax(235px, 310px) minmax(300px, 1fr);
+    gap: 22px;
+    align-items: center;
+  }
+
+  .breakdown-grid .donut {
+    width: 260px;
+    height: 260px;
+    justify-self: center;
+  }
+
+  .breakdown-grid .donut-legend {
+    align-content: center;
+  }
+
+  .breakdown-grid .donut-legend button {
+    grid-template-columns: 12px minmax(0, 1fr) max-content;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .breakdown-grid .donut-legend strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .drill-modal {
+    width: min(96vw, 1580px);
+    height: min(94vh, 960px);
+    max-height: 94vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 28px;
+  }
+
+  .modal-head {
+    flex: 0 0 auto;
+    padding: 18px 24px 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .modal-head p {
+    margin-bottom: 5px;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+  }
+
+  .modal-head h2 {
+    font-size: clamp(25px, 1.7vw, 34px);
+    line-height: 1.05;
+    margin: 0 0 6px;
+  }
+
+  .modal-head span {
+    font-size: 15px;
+  }
+
+  .modal-actions {
+    align-self: center;
+  }
+
+  .modal-filter-block {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    gap: 12px;
+    align-items: end;
+    padding: 12px 24px 14px;
+    margin: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background:
+      radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.055), transparent 28%),
+      rgba(8, 13, 29, 0.72);
+  }
+
+  .modal-filter-block .filter-panel {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .modal-filter-block .filter-row.first,
+  .modal-filter-block .filter-row.second {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .modal-filter-block .filter-row.first {
+    margin-bottom: 8px;
+  }
+
+  .modal-filter-block .filter-row.second {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  }
+
+  .modal-filter-block .cex-check {
+    min-height: 42px;
+    align-self: end;
+  }
+
+  .modal-filter-block label > span,
+  .modal-search span {
+    margin-bottom: 5px;
+    font-size: 10px;
+    letter-spacing: 0.13em;
+  }
+
+  .modal-filter-block .date-picker-button,
+  .modal-filter-block .multi-button,
+  .modal-filter-block .reset-btn,
+  .modal-search input {
+    min-height: 42px;
+    height: 42px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-radius: 14px;
+  }
+
+  .modal-filter-block .date-picker-button strong,
+  .modal-filter-block .multi-button strong {
+    font-size: 14px;
+  }
+
+  .modal-search {
+    align-self: end;
+  }
+
+  .modal-table-wrap {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 0;
+    overflow: auto;
+    border-radius: 0 0 28px 28px;
+  }
+
+  .modal-table-wrap table {
+    font-size: 15px;
+  }
+
+  .modal-table-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 13px 12px;
+    background: rgba(12, 18, 34, 0.98);
+    backdrop-filter: blur(12px);
+  }
+
+  .modal-table-wrap tbody td {
+    padding: 13px 12px;
+    vertical-align: top;
+  }
+
+  .modal-table-wrap td small {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .modal-table-wrap .action-buttons,
+  .modal-table-wrap .conversation-actions {
+    gap: 7px;
+  }
+
+  .modal-table-wrap .action-buttons button,
+  .modal-table-wrap .action-buttons a,
+  .modal-table-wrap .conversation-actions button,
+  .modal-table-wrap .conversation-actions a {
+    min-height: 30px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  @media (max-width: 1260px) {
+    .modal-filter-block {
+      grid-template-columns: 1fr;
+    }
+
+    .modal-filter-block .filter-row.first,
+    .modal-filter-block .filter-row.second {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1060px) {
+    .breakdown-grid .donut-layout,
+    .overview-feature-grid .donut-layout,
+    .sentiment-resolution-grid .donut-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .drill-modal {
+      width: 98vw;
+      height: 96vh;
+    }
+
+    .modal-head {
+      grid-template-columns: 1fr;
+    }
   }
 
 `;
