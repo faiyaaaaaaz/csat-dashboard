@@ -6126,7 +6126,7 @@ const runStyles = `
   }
 
   .run-date-button {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
     min-height: 56px;
   }
 
@@ -6134,9 +6134,22 @@ const runStyles = `
     display: inline-flex;
     align-items: center;
     gap: 9px;
+    min-width: max-content;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .run-date-button strong svg {
+    flex: 0 0 17px;
+    width: 17px;
+    height: 17px;
   }
 
   .run-date-button small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #a9b4d0;
     font-size: 14px;
     font-weight: 800;
