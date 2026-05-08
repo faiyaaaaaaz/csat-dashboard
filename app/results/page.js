@@ -224,6 +224,37 @@ function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
   };
 }
 
+function isCompactPreviewEvent(message) {
+  const type = String(message?.messageType || "").toLowerCase();
+  const body = previewText(message?.body).toLowerCase();
+
+  if (message?.authorType === "system") return true;
+
+  const systemTypeHints = [
+    "assignment",
+    "assign",
+    "workflow",
+    "sla",
+    "attribute",
+    "tag",
+    "close",
+    "open",
+    "snooze",
+    "custom_action",
+    "operator_workflow",
+    "language_detection",
+    "conversation_rating",
+  ];
+
+  if (systemTypeHints.some((hint) => type.includes(hint))) return true;
+
+  return /\b(conversation\s+(sla|attribute|status|rating|tag|assigned|assignment|reopened|closed|snoozed|updated)|sla\s+target\s+missed|operator\s+workflow|default\s+assignment|custom\s+action|message\s+strategy\s+assignment|language\s+detection|fin\s+(guidance|customisation)|queue\s+position|workflow\s+event|attribute\s+updated)\b/i.test(body);
+}
+
+function compactPreviewEventText(message) {
+  return previewText(message?.body, message?.messageType, "Conversation event.");
+}
+
 function ConversationPreviewModal({ conversationId, previewContext = null, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -365,13 +396,21 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                   </div>
                 ) : null}
                 <div className="conversation-transcript-list">
-                  {messages.length ? messages.map((message) => (
-                    <article key={message.id} className={`conversation-message ${message.authorType || "system"} ${message.authorType === "system" ? "compact-event" : ""}`}>
-                      <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
-                      <p>{message.body || "Open on Intercom to see this message."}</p>
-                      {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
-                    </article>
-                  )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
+                  {messages.length ? messages.map((message) => {
+                    const isEvent = isCompactPreviewEvent(message);
+                    return isEvent ? (
+                      <div key={message.id} className="conversation-timeline-event">
+                        <span>{formatDateTime(message.createdAt)}</span>
+                        <p>{compactPreviewEventText(message)}</p>
+                      </div>
+                    ) : (
+                      <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
+                        <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
+                        <p>{message.body || "Open on Intercom to see this message."}</p>
+                        {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
+                      </article>
+                    );
+                  }) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
                 </div>
               </section>
             </div>
@@ -4268,6 +4307,45 @@ const resultsStyles = `
     align-content: start;
     gap: 18px;
   }
+
+  .conversation-timeline-event {
+    justify-self: center;
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 8px;
+    max-width: min(760px, 82%);
+    margin: 2px auto;
+    padding: 5px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.46);
+    color: rgba(203, 213, 225, 0.86);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  }
+  .conversation-timeline-event::before {
+    content: "◷";
+    color: rgba(203, 213, 225, 0.72);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .conversation-timeline-event span {
+    color: rgba(148, 163, 184, 0.82);
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: 0.01em;
+  }
+  .conversation-timeline-event p {
+    grid-column: 2;
+    margin: 0;
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .conversation-message {
     max-width: min(980px, 78%);
     padding: 18px 20px;
