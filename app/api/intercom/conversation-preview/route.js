@@ -68,6 +68,75 @@ function normalizeIntercomTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+
+function formatAttributeLabel(label) {
+  return normalizeText(label)
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function attributeValueText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => attributeValueText(item)).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    const direct = normalizeText(value.name || value.label || value.title || value.value || value.text || value.status);
+    if (direct) return direct;
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const text = attributeValueText(item);
+        return text ? `${formatAttributeLabel(key)}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  const text = stripHtml(value).replace(/\s+/g, " ").trim();
+  if (!text || /^(null|undefined|nan)$/i.test(text)) return "";
+  if (/\.(png|jpe?g|gif|webp|mp4|mov|avi|mkv)(\?|$)/i.test(text)) return "";
+  return text;
+}
+
+function collectAttributeRows(...sources) {
+  const rows = [];
+  const seen = new Set();
+
+  const push = (label, value) => {
+    const cleanLabel = formatAttributeLabel(label);
+    const cleanValue = attributeValueText(value);
+    if (!cleanLabel || !cleanValue) return;
+    const key = `${cleanLabel.toLowerCase()}::${cleanValue.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({ label: cleanLabel, value: cleanValue });
+  };
+
+  sources.forEach((source) => {
+    if (!source) return;
+    if (Array.isArray(source)) {
+      source.forEach((item) => {
+        if (!item) return;
+        if (typeof item === "object" && !Array.isArray(item)) {
+          push(item.label || item.name || item.key || item.title, item.value ?? item.text ?? item.content ?? item.body);
+        } else {
+          push("Attribute", item);
+        }
+      });
+      return;
+    }
+    if (typeof source === "object") {
+      Object.entries(source).forEach(([key, value]) => push(key, value));
+    }
+  });
+
+  return rows.slice(0, 80);
+}
+
 function collectNames(values) {
   const list = Array.isArray(values) ? values : [];
   return Array.from(
@@ -247,6 +316,14 @@ function buildMetadata(conversation) {
     inboxName: normalizeText(conversation?.inbox?.name || conversation?.source?.name),
     workflowName: normalizeText(conversation?.conversation_message?.subject || conversation?.source?.delivered_as),
     tags: collectNames(conversation?.tags?.tags),
+    attributes: collectAttributeRows(
+      conversation?.custom_attributes,
+      conversation?.conversation_attributes,
+      conversation?.source?.custom_attributes,
+      conversation?.source?.author?.custom_attributes,
+      conversation?.contacts?.contacts?.[0]?.custom_attributes,
+      conversation?.contacts?.contacts?.[0]?.social_profiles,
+    ),
   };
 }
 
