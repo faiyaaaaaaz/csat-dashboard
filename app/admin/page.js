@@ -497,7 +497,8 @@ function MoreMembersChip({ members = [], count = 0 }) {
       <button
         ref={chipRef}
         type="button"
-        className="member-more-chip"
+        className="member-more-chip notranslate"
+        translate="no"
         aria-label={`Show ${formatNumber(count)} hidden team member${count === 1 ? "" : "s"}: ${tooltipText}`}
         title={tooltipText}
         onMouseEnter={showTooltip}
@@ -515,7 +516,7 @@ function MoreMembersChip({ members = [], count = 0 }) {
               style={{ top: position.top, left: position.left, width: position.width }}
             >
               <strong>Hidden Team Members</strong>
-              <div>{tooltipText}</div>
+              <div className="notranslate" translate="no">{tooltipText}</div>
             </div>,
             document.body
           )
@@ -1077,6 +1078,23 @@ function getLockedNameForEmail(email, mappings) {
   );
 
   return normalizeText(match?.employee_name);
+}
+
+function getCanonicalSupervisorName(team, mappings) {
+  const lockedName = getLockedNameForEmail(team?.supervisor_email, mappings);
+  const savedName = normalizeText(team?.supervisor_name);
+  const email = normalizeEmail(team?.supervisor_email);
+
+  return lockedName || savedName || email || "Supervisor Team";
+}
+
+function getSavedNameMismatchNote(savedName, displayName) {
+  const saved = normalizeText(savedName);
+  const display = normalizeText(displayName);
+
+  if (!saved || !display || normalizeKey(saved) === normalizeKey(display)) return "";
+
+  return `Saved label: ${saved}`;
 }
 
 async function readApiJson(response) {
@@ -3621,10 +3639,10 @@ export default function AdminPage() {
                           >
                             <span className="member-check">{selected ? "✓" : "+"}</span>
 
-                            <span className="member-copy">
-                              <strong>{option.employee_name}</strong>
-                              <small>{option.employee_email || "No email"} • {option.team_name || "No team"}</small>
-                              <em>{option.intercom_agent_name || "No Intercom agent"}</em>
+                            <span className="member-copy notranslate" translate="no">
+                              <strong translate="no">{option.employee_name}</strong>
+                              <small translate="no">{option.employee_email || "No email"} • {option.team_name || "No team"}</small>
+                              <em translate="no">{option.intercom_agent_name || "No Intercom agent"}</em>
                             </span>
                           </button>
                         );
@@ -3680,66 +3698,72 @@ export default function AdminPage() {
                 <div className="empty-box">No Supervisor Teams Saved Yet.</div>
               ) : (
                 <div className="supervisor-card-list">
-                  {filteredSupervisorTeams.map((team) => (
-                    <article key={team.id} className={team.is_active === false ? "supervisor-card inactive" : "supervisor-card"}>
-                      <div className="supervisor-card-head">
-                        <div>
-                          <h3>{team.supervisor_name}</h3>
-                          <p>{team.supervisor_email || "No email saved"}</p>
+                  {filteredSupervisorTeams.map((team) => {
+                    const supervisorDisplayName = getCanonicalSupervisorName(team, mappingRows);
+                    const savedNameNote = getSavedNameMismatchNote(team.supervisor_name, supervisorDisplayName);
+
+                    return (
+                      <article key={team.id} className={team.is_active === false ? "supervisor-card inactive" : "supervisor-card"}>
+                        <div className="supervisor-card-head">
+                          <div className="notranslate" translate="no">
+                            <h3 translate="no">{supervisorDisplayName}</h3>
+                            <p translate="no">{team.supervisor_email || "No email saved"}</p>
+                            {savedNameNote ? <small className="canonical-note" translate="no">{savedNameNote}</small> : null}
+                          </div>
+
+                          <span className={team.is_active === false ? "status inactive" : "status active"}>
+                            {team.is_active === false ? "Inactive" : "Active"}
+                          </span>
                         </div>
 
-                        <span className={team.is_active === false ? "status inactive" : "status active"}>
-                          {team.is_active === false ? "Inactive" : "Active"}
-                        </span>
-                      </div>
+                        {team.notes ? <p className="supervisor-note notranslate" translate="no">{team.notes}</p> : null}
 
-                      {team.notes ? <p className="supervisor-note">{team.notes}</p> : null}
+                        <div className="supervisor-member-preview notranslate" translate="no">
+                          {(team.members || []).slice(0, 10).map((member) => (
+                            <span key={getMemberKey(member)} translate="no">{member.employee_name}</span>
+                          ))}
 
-                      <div className="supervisor-member-preview">
-                        {(team.members || []).slice(0, 10).map((member) => (
-                          <span key={getMemberKey(member)}>{member.employee_name}</span>
-                        ))}
+                          {(team.members || []).length > 10 ? (
+                            <MoreMembersChip
+                              members={(team.members || []).slice(10)}
+                              count={(team.members || []).length - 10}
+                            />
+                          ) : null}
 
-                        {(team.members || []).length > 10 ? (
-                          <MoreMembersChip
-                            members={(team.members || []).slice(10)}
-                            count={(team.members || []).length - 10}
-                          />
-                        ) : null}
-
-                        {(team.members || []).length === 0 ? <span>No members assigned</span> : null}
-                      </div>
-
-                      <div className="supervisor-card-foot">
-                        <small>
-                          {formatNumber((team.members || []).length)} member(s) • Updated {formatDateTime(team.updated_at)}
-                        </small>
-
-                        <div className="table-actions">
-                          <button
-                            type="button"
-                            className="secondary-btn small"
-                            onClick={() => handleEditSupervisorTeam(team)}
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="secondary-btn small"
-                            disabled={supervisorToggleLoadingId === team.id}
-                            onClick={() => handleToggleSupervisorTeamActive(team)}
-                          >
-                            {supervisorToggleLoadingId === team.id
-                              ? "Saving..."
-                              : team.is_active === false
-                              ? "Activate"
-                              : "Deactivate"}
-                          </button>
+                          {(team.members || []).length === 0 ? <span>No members assigned</span> : null}
                         </div>
-                      </div>
-                    </article>
-                  ))}
+
+                        <div className="supervisor-card-foot">
+                          <small>
+                            {formatNumber((team.members || []).length)} member(s) • Updated {formatDateTime(team.updated_at)}
+                          </small>
+
+                          <div className="table-actions">
+                            <button
+                              type="button"
+                              className="secondary-btn small"
+                              onClick={() => handleEditSupervisorTeam(team)}
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              className="secondary-btn small"
+                              disabled={supervisorToggleLoadingId === team.id}
+                              onClick={() => handleToggleSupervisorTeamActive(team)}
+                            >
+                              {supervisorToggleLoadingId === team.id
+                                ? "Saving..."
+                                : team.is_active === false
+                                ? "Activate"
+                                : "Deactivate"}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </article>
@@ -4342,20 +4366,20 @@ export default function AdminPage() {
                   <tbody>
                     {filteredMappings.map((row) => (
                       <tr key={row.id || row.intercom_agent_name}>
-                        <td>
-                          <strong>{row.intercom_agent_name || "-"}</strong>
+                        <td className="notranslate" translate="no">
+                          <strong translate="no">{row.intercom_agent_name || "-"}</strong>
                           <small>Raw Intercom name</small>
                         </td>
 
-                        <td>
-                          <strong>{row.employee_name || "-"}</strong>
-                          <small>{row.employee_email || "No email"}</small>
-                          {row.notes ? <em>{row.notes}</em> : null}
+                        <td className="notranslate" translate="no">
+                          <strong translate="no">{row.employee_name || "-"}</strong>
+                          <small translate="no">{row.employee_email || "No email"}</small>
+                          {row.notes ? <em translate="no">{row.notes}</em> : null}
                         </td>
 
                         <td>
                           {row.team_name ? (
-                            <span className="team-pill">{row.team_name}</span>
+                            <span className="team-pill notranslate" translate="no">{row.team_name}</span>
                           ) : (
                             <span className="missing-text">No team</span>
                           )}
@@ -6702,4 +6726,13 @@ const adminStyles = `
       width: 100%;
     }
   }
+  .canonical-note {
+    display: block;
+    margin-top: 3px;
+    color: #7fa7ff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .01em;
+  }
+
 `;
