@@ -619,6 +619,37 @@ function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
   };
 }
 
+function isCompactPreviewEvent(message) {
+  const type = String(message?.messageType || "").toLowerCase();
+  const body = previewText(message?.body).toLowerCase();
+
+  if (message?.authorType === "system") return true;
+
+  const systemTypeHints = [
+    "assignment",
+    "assign",
+    "workflow",
+    "sla",
+    "attribute",
+    "tag",
+    "close",
+    "open",
+    "snooze",
+    "custom_action",
+    "operator_workflow",
+    "language_detection",
+    "conversation_rating",
+  ];
+
+  if (systemTypeHints.some((hint) => type.includes(hint))) return true;
+
+  return /\b(conversation\s+(sla|attribute|status|rating|tag|assigned|assignment|reopened|closed|snoozed|updated)|sla\s+target\s+missed|operator\s+workflow|default\s+assignment|custom\s+action|message\s+strategy\s+assignment|language\s+detection|fin\s+(guidance|customisation)|queue\s+position|workflow\s+event|attribute\s+updated)\b/i.test(body);
+}
+
+function compactPreviewEventText(message) {
+  return previewText(message?.body, message?.messageType, "Conversation event.");
+}
+
 function ConversationPreviewModal({ conversationId, previewContext = null, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -760,13 +791,21 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                   </div>
                 ) : null}
                 <div className="conversation-transcript-list">
-                  {messages.length ? messages.map((message) => (
-                    <article key={message.id} className={`conversation-message ${message.authorType || "system"} ${message.authorType === "system" ? "compact-event" : ""}`}>
-                      <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
-                      <p>{message.body || "Open on Intercom to see this message."}</p>
-                      {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
-                    </article>
-                  )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
+                  {messages.length ? messages.map((message) => {
+                    const isEvent = isCompactPreviewEvent(message);
+                    return isEvent ? (
+                      <div key={message.id} className="conversation-timeline-event">
+                        <span>{formatDateTime(message.createdAt)}</span>
+                        <p>{compactPreviewEventText(message)}</p>
+                      </div>
+                    ) : (
+                      <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
+                        <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
+                        <p>{message.body || "Open on Intercom to see this message."}</p>
+                        {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
+                      </article>
+                    );
+                  }) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
                 </div>
               </section>
             </div>
@@ -1079,6 +1118,23 @@ function detailFiltersWith(baseFilters, overrides = {}) {
   }
 
   return next;
+}
+
+function detailFiltersForEmployee(baseFilters, employee, overrides = {}) {
+  const cleanEmployee = previewText(employee);
+  return detailFiltersWith(baseFilters, {
+    employees: cleanEmployee && cleanEmployee !== "Unmapped" ? [cleanEmployee] : [],
+    ...overrides,
+  });
+}
+
+function detailFiltersForPeriod(baseFilters, period, employee, overrides = {}) {
+  return detailFiltersForEmployee(baseFilters, employee, {
+    rangePreset: "custom",
+    startDate: formatInputDate(period?.start),
+    endDate: formatInputDate(period?.end),
+    ...overrides,
+  });
 }
 
 function cloneFilters(filters, fallbackPreset = "all", fallbackCexOnly = false) {
@@ -2408,7 +2464,7 @@ function WeeklyAgentTable({
                     <button
                       type="button"
                       className="text-link"
-                      onClick={() => onOpenDetail("Employee Drill In", employeeRow.employee, employeeRow.totalRows, filters)}
+                      onClick={() => onOpenDetail("Employee Drill In", employeeRow.employee, rows, detailFiltersForEmployee(filters, employeeRow.employee))}
                     >
                       {employeeRow.employee}
                     </button>
@@ -2425,7 +2481,7 @@ function WeeklyAgentTable({
                           title={metricLabel}
                           onClick={() =>
                             drillRows.length
-                              ? onOpenDetail(`${timeframeLabel} Agent Drill In`, `${employeeRow.employee} · ${period.dateLabel || period.label}`, drillRows, filters)
+                              ? onOpenDetail(`${timeframeLabel} Agent Drill In`, `${employeeRow.employee} · ${period.dateLabel || period.label}`, rows, detailFiltersForPeriod(filters, period, employeeRow.employee))
                               : null
                           }
                         >
@@ -2875,7 +2931,7 @@ export default function DashboardPage() {
             value={formatNumber(total)}
             trend={previousGlobalFilters ? buildMetricTrend(total, previousTotal) : null}
             accent="linear-gradient(135deg, rgba(37,99,235,0.26), rgba(99,102,241,0.12))"
-            onClick={() => openDetail("KPI Drill In", "Unique Conversations", filteredRows, globalFilters)}
+            onClick={() => openDetail("KPI Drill In", "Unique Conversations", dedupedRows, globalFilters)}
           />
           <KPIStat
             label="Missed Opportunities"
@@ -2887,7 +2943,7 @@ export default function DashboardPage() {
               openDetail(
                 "KPI Drill In",
                 "Missed Opportunities",
-                filteredRows.filter((row) => sameText(row.review_sentiment, "Missed Opportunity")),
+                dedupedRows,
                 detailFiltersWith(globalFilters, { reviewSentiments: ["Missed Opportunity"] })
               )
             }
@@ -2902,7 +2958,7 @@ export default function DashboardPage() {
               openDetail(
                 "KPI Drill In",
                 "Very Positive",
-                filteredRows.filter((row) => sameText(row.client_sentiment, "Very Positive")),
+                dedupedRows,
                 detailFiltersWith(globalFilters, { clientSentiments: ["Very Positive"] })
               )
             }
@@ -2917,7 +2973,7 @@ export default function DashboardPage() {
               openDetail(
                 "KPI Drill In",
                 "Resolved",
-                filteredRows.filter((row) => sameText(row.resolution_status, "Resolved")),
+                dedupedRows,
                 detailFiltersWith(globalFilters, { resolutionStatuses: ["Resolved"] })
               )
             }
@@ -2932,7 +2988,7 @@ export default function DashboardPage() {
               openDetail(
                 "KPI Drill In",
                 "Unresolved",
-                filteredRows.filter((row) => sameText(row.resolution_status, "Unresolved")),
+                dedupedRows,
                 detailFiltersWith(globalFilters, { resolutionStatuses: ["Unresolved"] })
               )
             }
@@ -3011,7 +3067,7 @@ export default function DashboardPage() {
                   openDetail(
                     "Missed Opportunities Drill In",
                     "All Client Sentiments",
-                    missedRows,
+                    dedupedRows,
                     detailFiltersWith(globalFilters, { reviewSentiments: ["Missed Opportunity"] })
                   )
                 }
@@ -3024,7 +3080,7 @@ export default function DashboardPage() {
                     openDetail(
                       "Missed Opportunities Drill In",
                       entry.label,
-                      entry.rows,
+                      dedupedRows,
                       detailFiltersWith(globalFilters, {
                         reviewSentiments: ["Missed Opportunity"],
                         clientSentiments: [entry.label],
@@ -3041,7 +3097,7 @@ export default function DashboardPage() {
                 subtitle="Overall Client Emotional Outcome"
                 larger
                 help="Shows the emotional tone of clients in the selected conversations, from Very Positive to Very Negative."
-                onDrill={() => openDetail("Client Sentiment Drill In", "All Client Sentiments", filteredRows, globalFilters)}
+                onDrill={() => openDetail("Client Sentiment Drill In", "All Client Sentiments", dedupedRows, globalFilters)}
               >
                 <HorizontalBarChart
                   entries={clientEntries}
@@ -3051,7 +3107,7 @@ export default function DashboardPage() {
                     openDetail(
                       "Client Sentiment Drill In",
                       entry.label,
-                      entry.rows,
+                      dedupedRows,
                       detailFiltersWith(globalFilters, { clientSentiments: [entry.label] })
                     )
                   }
@@ -3063,7 +3119,7 @@ export default function DashboardPage() {
                 subtitle="Status Of Conversations"
                 larger
                 help="Shows whether the selected conversations were Resolved, Pending, Unclear, or Unresolved."
-                onDrill={() => openDetail("Resolution Drill In", "All Resolution Statuses", filteredRows, globalFilters)}
+                onDrill={() => openDetail("Resolution Drill In", "All Resolution Statuses", dedupedRows, globalFilters)}
               >
                 <HorizontalBarChart
                   entries={resolutionEntries}
@@ -3073,7 +3129,7 @@ export default function DashboardPage() {
                     openDetail(
                       "Resolution Drill In",
                       entry.label,
-                      entry.rows,
+                      dedupedRows,
                       detailFiltersWith(globalFilters, { resolutionStatuses: [entry.label] })
                     )
                   }
@@ -3086,7 +3142,7 @@ export default function DashboardPage() {
                 title="Review Approach Breakdown"
                 subtitle="Distribution By Review Approach"
                 help="Shows how the filtered conversations are distributed across review approach outcomes, including positive review signals, missed opportunities, and negative review risks."
-                onDrill={() => openDetail("Review Approach Drill In", "All Review Approaches", filteredRows, globalFilters)}
+                onDrill={() => openDetail("Review Approach Drill In", "All Review Approaches", dedupedRows, globalFilters)}
               >
                 <DonutChart
                   entries={reviewEntries}
@@ -3096,7 +3152,7 @@ export default function DashboardPage() {
                     openDetail(
                       "Review Approach Drill In",
                       entry.label,
-                      entry.rows,
+                      dedupedRows,
                       detailFiltersWith(globalFilters, { reviewSentiments: [entry.label] })
                     )
                   }
@@ -3111,7 +3167,7 @@ export default function DashboardPage() {
                   openDetail(
                     "Missed Opportunities Drill In",
                     "All Resolution Statuses",
-                    missedRows,
+                    dedupedRows,
                     detailFiltersWith(globalFilters, { reviewSentiments: ["Missed Opportunity"] })
                   )
                 }
@@ -3124,7 +3180,7 @@ export default function DashboardPage() {
                     openDetail(
                       "Missed Opportunities Drill In",
                       entry.label,
-                      entry.rows,
+                      dedupedRows,
                       detailFiltersWith(globalFilters, {
                         reviewSentiments: ["Missed Opportunity"],
                         resolutionStatuses: [entry.label],
@@ -3169,6 +3225,7 @@ export default function DashboardPage() {
                     theme: "green",
                     rows: [...leaderboard].sort((a, b) => b.likelyPositive - a.likelyPositive).slice(0, 5),
                     value: (row) => formatNumber(row.likelyPositive),
+                    filterOverrides: { reviewSentiments: ["Highly Likely Positive Review", "Likely Positive Review"] },
                     rowsFor: (row) => row.rows.filter(isLikelyPositiveReview),
                   },
                   {
@@ -3176,6 +3233,7 @@ export default function DashboardPage() {
                     theme: "red",
                     rows: [...leaderboard].sort((a, b) => b.missed - a.missed).slice(0, 5),
                     value: (row) => formatNumber(row.missed),
+                    filterOverrides: { reviewSentiments: ["Missed Opportunity"] },
                     rowsFor: (row) => row.rows.filter((item) => item.review_sentiment === "Missed Opportunity"),
                   },
                   {
@@ -3183,6 +3241,7 @@ export default function DashboardPage() {
                     theme: "green",
                     rows: [...leaderboard].sort((a, b) => b.veryPositive - a.veryPositive).slice(0, 5),
                     value: (row) => formatNumber(row.veryPositive),
+                    filterOverrides: { clientSentiments: ["Very Positive"] },
                     rowsFor: (row) => row.rows.filter((item) => item.client_sentiment === "Very Positive"),
                   },
                   {
@@ -3190,6 +3249,7 @@ export default function DashboardPage() {
                     theme: "red",
                     rows: [...leaderboard].sort((a, b) => b.likelyNegative - a.likelyNegative).slice(0, 5),
                     value: (row) => formatNumber(row.likelyNegative),
+                    filterOverrides: { reviewSentiments: ["Highly Likely Negative Review", "Likely Negative Review"] },
                     rowsFor: (row) => row.rows.filter(isLikelyNegativeReview),
                   },
                 ].map((block) => (
@@ -3200,7 +3260,7 @@ export default function DashboardPage() {
                         <button
                           key={`${block.title}-${row.employee}`}
                           type="button"
-                          onClick={() => openDetail("Leaderboard Drill In", `${block.title}: ${row.employee}`, block.rowsFor(row), leaderboardFilters)}
+                          onClick={() => openDetail("Leaderboard Drill In", `${block.title}: ${row.employee}`, dedupedRows, detailFiltersForEmployee(leaderboardFilters, row.employee, block.filterOverrides || {}))}
                         >
                           <strong>{row.employee}</strong>
                           <span>{block.value(row)}</span>
@@ -3236,7 +3296,7 @@ export default function DashboardPage() {
                     {leaderboard.map((row) => (
                       <tr key={row.employee}>
                         <td>
-                          <button type="button" className="text-link" onClick={() => openDetail("Employee Drill In", row.employee, row.rows, leaderboardFilters)}>
+                          <button type="button" className="text-link" onClick={() => openDetail("Employee Drill In", row.employee, dedupedRows, detailFiltersForEmployee(leaderboardFilters, row.employee))}>
                             {row.employee}
                           </button>
                         </td>
@@ -3248,7 +3308,7 @@ export default function DashboardPage() {
                         <td className="bad">{formatNumber(row.likelyNegative)}</td>
                         <td>{formatPercent(row.resolutionRate)}</td>
                         <td>
-                          <button type="button" className="small-btn" onClick={() => openDetail("Employee Drill In", row.employee, row.rows, leaderboardFilters)}>
+                          <button type="button" className="small-btn" onClick={() => openDetail("Employee Drill In", row.employee, dedupedRows, detailFiltersForEmployee(leaderboardFilters, row.employee))}>
                             View
                           </button>
                         </td>
@@ -6336,6 +6396,45 @@ const dashboardStyles = `
     align-content: start;
     gap: 18px;
   }
+
+  .conversation-timeline-event {
+    justify-self: center;
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 8px;
+    max-width: min(760px, 82%);
+    margin: 2px auto;
+    padding: 5px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.46);
+    color: rgba(203, 213, 225, 0.86);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  }
+  .conversation-timeline-event::before {
+    content: "◷";
+    color: rgba(203, 213, 225, 0.72);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .conversation-timeline-event span {
+    color: rgba(148, 163, 184, 0.82);
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: 0.01em;
+  }
+  .conversation-timeline-event p {
+    grid-column: 2;
+    margin: 0;
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .conversation-message {
     max-width: min(980px, 78%);
     padding: 18px 20px;
