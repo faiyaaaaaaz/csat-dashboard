@@ -504,6 +504,84 @@ function previewTags(...values) {
   return [];
 }
 
+
+function formatPreviewAttributeLabel(label) {
+  return String(label || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function previewAttributeValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => previewAttributeValue(item))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof value === "object") {
+    const direct = previewText(value.name, value.label, value.title, value.value, value.text, value.status);
+    if (direct) return direct;
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const itemText = previewAttributeValue(item);
+        return itemText ? `${formatPreviewAttributeLabel(key)}: ${itemText}` : "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  const text = String(value ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (/^(null|undefined|nan)$/i.test(text)) return "";
+  if (/\.(png|jpe?g|gif|webp|mp4|mov|avi|mkv)(\?|$)/i.test(text)) return "";
+  return text;
+}
+
+function isPreviewValueFilled(value) {
+  const text = String(value ?? "").trim();
+  return Boolean(text && text !== "-" && !/^(null|undefined|nan)$/i.test(text));
+}
+
+function previewAttributes(...values) {
+  const rows = [];
+  const seen = new Set();
+
+  const pushRow = (label, value) => {
+    const cleanLabel = formatPreviewAttributeLabel(label);
+    const cleanValue = previewAttributeValue(value);
+    if (!cleanLabel || !cleanValue) return;
+    const key = `${cleanLabel.toLowerCase()}::${cleanValue.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({ label: cleanLabel, value: cleanValue });
+  };
+
+  for (const value of values) {
+    if (!value) continue;
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (!item) return;
+        if (typeof item === "object" && !Array.isArray(item)) {
+          pushRow(item.label || item.name || item.key || item.title, item.value ?? item.text ?? item.content ?? item.body);
+        } else {
+          pushRow("Attribute", item);
+        }
+      });
+      continue;
+    }
+    if (typeof value === "object") {
+      Object.entries(value).forEach(([key, item]) => pushRow(key, item));
+    }
+  }
+
+  return rows.slice(0, 80);
+}
+
 function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
   const context = previewContext && typeof previewContext === "object" ? previewContext : {};
   return {
@@ -537,6 +615,7 @@ function buildPreviewMetadata(serverMetadata = {}, previewContext = null) {
     workflowName: previewText(serverMetadata.workflowName, context.workflowName, context.workflow_name),
     subject: previewText(serverMetadata.subject, context.subject),
     tags: previewTags(serverMetadata.tags, context.tags),
+    customAttributes: previewAttributes(serverMetadata.attributes, serverMetadata.customAttributes, context.attributes, context.customAttributes, context.custom_attributes),
   };
 }
 
@@ -578,23 +657,30 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
   if (!conversationId) return null;
   const messages = normalizePreviewMessages(data);
   const mergedMetadata = useMemo(() => buildPreviewMetadata(data?.metadata || {}, previewContext), [data, previewContext]);
-  const infoCards = [
+  const auditResultCards = [
+    { label: "Review Approach", value: mergedMetadata.reviewApproach || "", tone: "review" },
+    { label: "Client Sentiment", value: mergedMetadata.clientSentiment || "", tone: "client" },
+    { label: "Resolution", value: mergedMetadata.resolutionStatus || "", tone: "resolution" },
+  ].filter((card) => isPreviewValueFilled(card.value));
+  const primaryRows = [
     { label: "Assigned Agent", value: mergedMetadata.assignedAgent || "Unassigned" },
     { label: "Rating", value: mergedMetadata.rating || "-" },
     { label: "Status", value: mergedMetadata.status || "-" },
     { label: "Created", value: mergedMetadata.createdAt ? formatDateTime(mergedMetadata.createdAt) : "-" },
-    { label: "Review Approach", value: mergedMetadata.reviewApproach || "-" },
-    { label: "Client", value: mergedMetadata.clientSentiment || "-" },
-    { label: "Resolution", value: mergedMetadata.resolutionStatus || "-" },
     { label: "Updated", value: mergedMetadata.updatedAt ? formatDateTime(mergedMetadata.updatedAt) : "-" },
-  ];
-  const detailCards = [
+  ].filter((row) => isPreviewValueFilled(row.value));
+  const contextRows = [
     { label: "Contact", value: mergedMetadata.contactName || mergedMetadata.clientEmail || "" },
     { label: "Team", value: mergedMetadata.teamName || "" },
+    { label: "Inbox", value: mergedMetadata.inboxName || "" },
     { label: "Workflow", value: mergedMetadata.workflowName || "" },
     { label: "Topic", value: mergedMetadata.subject || "" },
-    { label: "Inbox", value: mergedMetadata.inboxName || "" },
-  ].filter((card) => card.value);
+  ].filter((row) => isPreviewValueFilled(row.value));
+  const attributeSections = [
+    { title: "Conversation Details", subtitle: "Core Intercom fields", rows: primaryRows },
+    { title: "Intercom Context", subtitle: "Routing and contact data", rows: contextRows },
+    { title: "Intercom Attributes", subtitle: "Additional populated fields", rows: mergedMetadata.customAttributes || [] },
+  ].filter((section) => section.rows.length);
   const tags = mergedMetadata.tags || [];
 
   return createPortal(
@@ -618,53 +704,72 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
         ) : error ? (
           <div className="conversation-preview-error"><strong>Preview Not Available</strong><span>{error}</span><small>Open on Intercom to see this conversation.</small></div>
         ) : (
-          <div className="conversation-preview-body">
-            <aside className="conversation-preview-sidebar">
-              <div className="conversation-preview-sidebar-title">
-                <span>Case Details</span>
-                <small>Audit and Intercom context</small>
-              </div>
-              <div className="conversation-preview-meta">
-                {infoCards.map((card) => (
-                  <div key={card.label}><span>{card.label}</span><strong>{card.value}</strong></div>
+          <div className="conversation-preview-loaded">
+            {auditResultCards.length ? (
+              <div className="conversation-preview-result-strip">
+                {auditResultCards.map((card) => (
+                  <div key={card.label} className={`conversation-preview-result-card ${card.tone}`}>
+                    <span>{card.label}</span>
+                    <strong>{card.value}</strong>
+                  </div>
                 ))}
               </div>
-              {detailCards.length || tags.length ? (
-                <div className="conversation-preview-attributes">
-                  {detailCards.map((card) => (
-                    <div key={card.label} className="attribute-card"><span>{card.label}</span><strong>{card.value}</strong></div>
-                  ))}
-                  {tags.length ? (
-                    <div className="attribute-card tags-card">
-                      <span>Tags</span>
-                      <div className="conversation-preview-tags">
-                        {tags.map((tag) => <i key={tag}>{tag}</i>)}
-                      </div>
+            ) : null}
+            <div className="conversation-preview-body">
+              <aside className="conversation-preview-sidebar">
+                <div className="conversation-preview-sidebar-title">
+                  <span>Case Details</span>
+                  <small>Compact audit and Intercom context</small>
+                </div>
+                {attributeSections.map((section) => (
+                  <section key={section.title} className="conversation-preview-compact-section">
+                    <div className="conversation-preview-section-head">
+                      <span>{section.title}</span>
+                      <small>{section.subtitle}</small>
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </aside>
-            <section className="conversation-preview-main">
-              {mergedMetadata.aiVerdict ? (
-                <div className="conversation-preview-verdict">
-                  <div className="conversation-preview-verdict-head">
-                    <span>AI Verdict Snapshot</span>
-                    <small>From the stored audit result</small>
+                    <div className="conversation-preview-attribute-list">
+                      {section.rows.map((row) => (
+                        <div key={`${section.title}-${row.label}`} className="conversation-preview-attr-row">
+                          <span>{row.label}</span>
+                          <strong>{row.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+                {tags.length ? (
+                  <section className="conversation-preview-compact-section">
+                    <div className="conversation-preview-section-head">
+                      <span>Tags</span>
+                      <small>Labels and workflow markers</small>
+                    </div>
+                    <div className="conversation-preview-tags">
+                      {tags.map((tag) => <i key={tag}>{tag}</i>)}
+                    </div>
+                  </section>
+                ) : null}
+              </aside>
+              <section className="conversation-preview-main">
+                {mergedMetadata.aiVerdict ? (
+                  <div className="conversation-preview-verdict">
+                    <div className="conversation-preview-verdict-head">
+                      <span>AI Verdict Snapshot</span>
+                      <small>From the stored audit result</small>
+                    </div>
+                    <pre>{mergedMetadata.aiVerdict}</pre>
                   </div>
-                  <pre>{mergedMetadata.aiVerdict}</pre>
+                ) : null}
+                <div className="conversation-transcript-list">
+                  {messages.length ? messages.map((message) => (
+                    <article key={message.id} className={`conversation-message ${message.authorType || "system"} ${message.authorType === "system" ? "compact-event" : ""}`}>
+                      <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
+                      <p>{message.body || "Open on Intercom to see this message."}</p>
+                      {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
+                    </article>
+                  )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
                 </div>
-              ) : null}
-              <div className="conversation-transcript-list">
-                {messages.length ? messages.map((message) => (
-                  <article key={message.id} className={`conversation-message ${message.authorType || "system"}`}>
-                    <div className="conversation-message-top"><strong>{message.authorName || "Unknown"}</strong><span>{formatDateTime(message.createdAt)}</span></div>
-                    <p>{message.body || "Open on Intercom to see this message."}</p>
-                    {!message.isRenderableText ? <small>Open on Intercom to see this message.</small> : null}
-                  </article>
-                )) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         )}
       </div>
@@ -6086,6 +6191,116 @@ const dashboardStyles = `
   .conversation-preview-attributes .tags-card { grid-column: auto; }
   .conversation-preview-tags { display: flex; flex-wrap: wrap; gap: 8px; }
   .conversation-preview-tags i { padding: 7px 10px; border-radius: 999px; border: 1px solid rgba(96, 165, 250, 0.22); background: rgba(59, 130, 246, 0.14); color: #dbeafe; font-style: normal; font-size: 12px; font-weight: 850; }
+  .conversation-preview-loaded {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .conversation-preview-result-strip {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.56), rgba(8, 13, 28, 0.36));
+  }
+  .conversation-preview-result-card {
+    min-width: 0;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.76);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .conversation-preview-result-card.review { border-color: rgba(251, 191, 36, 0.3); background: linear-gradient(180deg, rgba(251, 191, 36, 0.12), rgba(15, 23, 42, 0.72)); }
+  .conversation-preview-result-card.client { border-color: rgba(45, 212, 191, 0.3); background: linear-gradient(180deg, rgba(45, 212, 191, 0.12), rgba(15, 23, 42, 0.72)); }
+  .conversation-preview-result-card.resolution { border-color: rgba(168, 85, 247, 0.3); background: linear-gradient(180deg, rgba(168, 85, 247, 0.13), rgba(15, 23, 42, 0.72)); }
+  .conversation-preview-result-card span,
+  .conversation-preview-result-card strong { display: block; min-width: 0; }
+  .conversation-preview-result-card span {
+    color: #9fb5ff;
+    font-size: 11px;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .conversation-preview-result-card strong {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 950;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .conversation-preview-compact-section {
+    margin-bottom: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.42);
+  }
+  .conversation-preview-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    background: rgba(96, 165, 250, 0.055);
+  }
+  .conversation-preview-section-head span {
+    color: #f8fbff;
+    font-size: 13px;
+    font-weight: 950;
+    letter-spacing: -0.01em;
+  }
+  .conversation-preview-section-head small {
+    color: #91a6d8;
+    font-size: 10px;
+    font-weight: 850;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: right;
+  }
+  .conversation-preview-attribute-list { display: grid; grid-template-columns: 1fr; }
+  .conversation-preview-attr-row {
+    display: grid;
+    grid-template-columns: minmax(92px, 42%) minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    min-height: 34px;
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.075);
+  }
+  .conversation-preview-attr-row:last-child { border-bottom: 0; }
+  .conversation-preview-attr-row span {
+    color: #91a6d8;
+    font-size: 11px;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.35;
+  }
+  .conversation-preview-attr-row strong {
+    min-width: 0;
+    color: #f8fbff;
+    font-size: 13px;
+    font-weight: 850;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .conversation-preview-compact-section .conversation-preview-tags {
+    padding: 12px;
+    gap: 7px;
+  }
+  .conversation-preview-compact-section .conversation-preview-tags i {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
   .conversation-preview-verdict {
     flex: 0 0 auto;
     margin: 22px 26px 14px;
@@ -6137,6 +6352,20 @@ const dashboardStyles = `
   .conversation-message-top span,
   .conversation-message small { color: #9fb5ff; font-size: 13px; font-weight: 850; }
   .conversation-message p { margin: 0; color: #e7efff; white-space: pre-wrap; line-height: 1.75; font-size: 16px; overflow-wrap: anywhere; }
+  .conversation-message.system,
+  .conversation-message.compact-event {
+    max-width: min(620px, 62%);
+    padding: 11px 14px;
+    border-radius: 16px;
+    border-color: rgba(148, 163, 184, 0.12);
+    background: rgba(255, 255, 255, 0.048);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+  .conversation-message.compact-event .conversation-message-top { margin-bottom: 5px; gap: 10px; }
+  .conversation-message.compact-event .conversation-message-top strong,
+  .conversation-message.compact-event .conversation-message-top span { font-size: 11.5px; }
+  .conversation-message.compact-event p { font-size: 12.5px; line-height: 1.45; color: #d8e3fb; }
+
   .conversation-preview-loading,
   .conversation-preview-empty,
   .conversation-preview-error { margin: 24px 28px; padding: 24px; border-radius: 20px; border: 1px dashed rgba(148, 163, 184, 0.22); color: #dbe7ff; background: rgba(15, 23, 42, 0.7); }
