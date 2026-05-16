@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 const MASTER_ADMIN_EMAIL = "faiyaz@nextventures.io";
@@ -601,7 +601,7 @@ function LoginScreen({ authMessage, onGoogleLogin }) {
   );
 }
 
-export default function AppShellClient({ children }) {
+function AppShellClientInner({ children }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -2389,3 +2389,11 @@ const appShellStyles = `
     }
   }
 `;
+
+export default function AppShellClient({ children }) {
+  return (
+    <Suspense fallback={<div className="app-shell-loading">Loading workspace...</div>}>
+      <AppShellClientInner>{children}</AppShellClientInner>
+    </Suspense>
+  );
+}
