@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabase";
+import DisputeVerdictButton from "./components/DisputeVerdictButton";
 
 const INTERCOM_BASE_URL =
   "https://app.intercom.com/a/inbox/aphmhtyj/inbox/conversation";
@@ -2344,6 +2345,7 @@ function DetailModal({
                           onToggleVerdict={() => toggleVerdict(verdictKey)}
                           verdictVisible={isVerdictVisible}
                         />
+                        <DisputeVerdictButton result={row} />
                       </td>
                     </tr>
                     {isVerdictVisible ? (
@@ -3431,6 +3433,7 @@ export default function DashboardPage() {
                                 onToggleVerdict={() => toggleVerdict(verdictKey)}
                                 verdictVisible={isVerdictVisible}
                               />
+                              <DisputeVerdictButton result={row} />
                             </td>
                           </tr>
                           {isVerdictVisible ? (
@@ -6160,6 +6163,27 @@ const dashboardStyles = `
     }
   }
 
+
+
+  .mini-dispute-btn {
+    border: 1px solid rgba(148, 163, 255, 0.28); border-radius: 999px; padding: 8px 11px;
+    background: rgba(15, 23, 42, 0.74); color: #dbe7ff; font-size: 12px; font-weight: 900; cursor: pointer; white-space: nowrap;
+  }
+  .mini-dispute-btn:hover { border-color: rgba(125, 92, 255, 0.72); color: #ffffff; }
+  .dispute-modal-backdrop { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(2, 6, 23, 0.76); backdrop-filter: blur(14px); }
+  .dispute-modal { width: min(760px, 96vw); max-height: 92vh; overflow: auto; border: 1px solid rgba(148, 163, 255, 0.22); border-radius: 28px; padding: 24px; background: linear-gradient(145deg, rgba(10, 15, 32, 0.98), rgba(17, 24, 55, 0.96)); box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
+  .dispute-modal-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .dispute-modal-head p { margin: 0 0 6px; color: #9fb5ff; font-size: 12px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
+  .dispute-modal-head h2 { margin: 0; color: #fff; font-size: 28px; letter-spacing: -0.04em; }
+  .close-btn { width: 36px; height: 36px; border-radius: 999px; border: 1px solid rgba(148, 163, 255, 0.28); background: rgba(15, 23, 42, 0.82); color: #fff; font-size: 22px; cursor: pointer; }
+  .dispute-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .dispute-summary-grid div { border: 1px solid rgba(148, 163, 255, 0.16); border-radius: 16px; padding: 12px; background: rgba(15, 23, 42, 0.58); }
+  .dispute-summary-grid span { display: block; margin-bottom: 5px; color: #91a4d6; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+  .dispute-summary-grid strong { color: #f8fbff; font-size: 13px; word-break: break-word; }
+  .field-block { display: grid; gap: 8px; margin: 14px 0; color: #dbe7ff; font-weight: 900; }
+  .field-block span em { color: #fda4af; font-style: normal; font-size: 12px; }
+  .field-block textarea, .field-block select { width: 100%; border: 1px solid rgba(148, 163, 255, 0.22); border-radius: 16px; padding: 13px 14px; background: rgba(2, 6, 23, 0.62); color: #fff; outline: none; }
+  .dispute-modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 
   .conversation-action-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .mini-preview-btn, .mini-open-link, .mini-verdict-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.22); color: #eef4ff; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; white-space: nowrap; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
