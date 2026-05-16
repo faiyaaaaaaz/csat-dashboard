@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const INTERCOM_API_BASE = "https://api.intercom.io";
+const INTERCOM_PREVIEW_TIMEOUT_MS = 25000;
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -327,6 +328,23 @@ function buildMetadata(conversation) {
   };
 }
 
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = INTERCOM_PREVIEW_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Intercom preview request timed out. Please try again or open the conversation on Intercom.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function loadActiveApiKey(adminClient) {
   const { data, error } = await adminClient
     .from("api_keys")
@@ -402,7 +420,7 @@ export async function POST(request) {
     }
 
     const intercomApiKey = await loadActiveApiKey(auth.adminClient);
-    const response = await fetch(`${INTERCOM_API_BASE}/conversations/${encodeURIComponent(conversationId)}`, {
+    const response = await fetchWithTimeout(`${INTERCOM_API_BASE}/conversations/${encodeURIComponent(conversationId)}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
