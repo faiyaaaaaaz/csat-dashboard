@@ -53,6 +53,7 @@ export default function DisputeVerdictButton({
   open: controlledOpen,
   defaultOpen = false,
   onOpenChange,
+  onOpenRequest,
 }) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [reason, setReason] = useState("");
@@ -177,7 +178,13 @@ export default function DisputeVerdictButton({
         <button
           type="button"
           className="mini-dispute-btn"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            if (onOpenRequest) {
+              onOpenRequest(result || {}, payload);
+              return;
+            }
+            setOpen(true);
+          }}
           disabled={!canOpen}
           title={!canOpen ? "This row does not have enough saved result data to dispute." : "Dispute this Review Status verdict"}
         >
@@ -318,19 +325,26 @@ export default function DisputeVerdictButton({
         }
         .conversation-preview-body.has-dispute {
           grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
-          align-items: start;
+          align-items: stretch;
+          min-height: 0;
+          overflow: hidden;
         }
         .conversation-preview-body.has-dispute .conversation-preview-sidebar {
           display: none;
         }
         .conversation-preview-dispute-panel {
-          position: sticky;
-          top: 0;
-          max-height: calc(100vh - 220px);
+          min-height: 0;
+          height: 100%;
           overflow: auto;
         }
         .conversation-preview-body.has-dispute .conversation-preview-main {
           min-width: 0;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .conversation-preview-body.has-dispute .conversation-transcript-list {
+          min-height: 0;
+          overflow: auto;
         }
         @media (max-width: 1100px) {
           .conversation-preview-body.has-dispute {
