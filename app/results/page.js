@@ -278,17 +278,21 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
         if (!token) throw new Error("Your session expired. Please refresh and sign in again.");
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const response = await fetch("/api/intercom/conversation-preview", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
           body: JSON.stringify({ conversationId }),
           cache: "no-store",
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         const payload = await response.json().catch(() => null);
         if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Preview is not available for this conversation.");
         if (!cancelled) setData(payload);
       } catch (previewError) {
-        if (!cancelled) setError(previewError instanceof Error ? previewError.message : "Preview is not available for this conversation.");
+        if (!cancelled) setError(previewError?.name === "AbortError" ? "Preview took too long to load. Please try again or open the conversation on Intercom." : (previewError instanceof Error ? previewError.message : "Preview is not available for this conversation."));
       } finally {
         if (!cancelled) setLoading(false);
       }
