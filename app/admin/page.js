@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import CalibrationSnippetsPanel from "../components/CalibrationSnippetsPanel";
 
@@ -40,6 +41,180 @@ const ROLE_OPTIONS = [
     defaultCanRunTests: false,
   },
 ];
+
+const PERMISSION_CATALOG = [
+  { key: "page_dashboard", label: "View Dashboard", group: "Page Access", ownerLocked: true },
+  { key: "page_results", label: "View Results", group: "Page Access" },
+  { key: "page_run_audit", label: "Access Run Audit", group: "Page Access" },
+  { key: "page_admin", label: "Access Admin", group: "Page Access" },
+  { key: "audit_fetch_conversations", label: "Fetch Conversations", group: "Audit Operations" },
+  { key: "audit_run_ai", label: "Run AI Audit", group: "Audit Operations" },
+  { key: "audit_specific_rerun", label: "Specific Conversation Rerun", group: "Audit Operations" },
+  { key: "audit_bulk_run", label: "Bulk Audit", group: "Audit Operations" },
+  { key: "results_view_all", label: "View All Results", group: "Results & Verdicts" },
+  { key: "results_view_team", label: "View Team Results", group: "Results & Verdicts" },
+  { key: "results_view_own", label: "View Own Results", group: "Results & Verdicts" },
+  { key: "results_edit_verdict", label: "Edit AI Verdict", group: "Results & Verdicts" },
+  { key: "results_delete", label: "Delete Results", group: "Results & Verdicts" },
+  { key: "results_export", label: "Export Results", group: "Results & Verdicts" },
+  { key: "disputes_submit_own", label: "Submit Own Dispute", group: "Disputes" },
+  { key: "disputes_submit_team", label: "Submit Team Dispute", group: "Disputes" },
+  { key: "disputes_submit_any", label: "Submit Any Dispute", group: "Disputes" },
+  { key: "admin_disputes", label: "View Dispute Management", group: "Disputes" },
+  { key: "disputes_review", label: "Approve / Reject Disputes", group: "Disputes" },
+  { key: "admin_snippets", label: "View Calibration Snippets", group: "Calibration" },
+  { key: "snippets_create", label: "Create Snippets", group: "Calibration" },
+  { key: "snippets_generate", label: "Generate Snippets From Disputes", group: "Calibration" },
+  { key: "snippets_activate", label: "Activate / Deactivate Snippets", group: "Calibration" },
+  { key: "snippets_delete", label: "Delete Snippets", group: "Calibration" },
+  { key: "admin_prompt", label: "Manage Live Prompt", group: "Admin Configuration" },
+  { key: "admin_api_vault", label: "Manage API Vault", group: "Admin Configuration", ownerLocked: true },
+  { key: "admin_mappings", label: "Manage Agent Mappings", group: "Admin Configuration" },
+  { key: "admin_supervisor_teams", label: "Manage Supervisor Teams", group: "Admin Configuration" },
+  { key: "admin_roles", label: "Manage Roles & Permissions", group: "Admin Configuration", ownerLocked: true },
+  { key: "admin_activity_logs", label: "View Activity Logs", group: "Monitoring" },
+  { key: "activity_export", label: "Export Activity Logs", group: "Monitoring" },
+  { key: "activity_sessions", label: "View Recent Sessions", group: "Monitoring" },
+];
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  master_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: true,
+    audit_fetch_conversations: true,
+    audit_run_ai: true,
+    audit_specific_rerun: true,
+    audit_bulk_run: true,
+    results_view_all: true,
+    results_edit_verdict: true,
+    results_delete: true,
+    results_export: true,
+    disputes_submit_any: true,
+    admin_disputes: true,
+    disputes_review: true,
+    admin_snippets: true,
+    snippets_create: true,
+    snippets_generate: true,
+    snippets_activate: true,
+    snippets_delete: true,
+    admin_prompt: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_activity_logs: true,
+    activity_export: true,
+    activity_sessions: true,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  supervisor_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+    results_view_team: true,
+    results_view_own: true,
+    disputes_submit_team: true,
+    disputes_submit_own: true,
+  },
+  co_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: true,
+    results_view_all: true,
+    disputes_submit_any: true,
+    admin_prompt: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_disputes: false,
+    admin_snippets: false,
+    admin_activity_logs: false,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  audit_runner: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: false,
+    audit_fetch_conversations: true,
+    audit_run_ai: true,
+    audit_specific_rerun: true,
+    audit_bulk_run: true,
+    results_view_all: true,
+    results_export: true,
+    disputes_submit_own: true,
+  },
+  viewer: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+    results_view_own: true,
+    disputes_submit_own: true,
+  },
+};
+
+const OWNER_PERMISSIONS = Object.fromEntries(PERMISSION_CATALOG.map((item) => [item.key, true]));
+
+const ADMIN_SECTION_META = {
+  overview: {
+    title: "Overview",
+    eyebrow: "Control Center",
+    description: "High-level status for prompts, mappings, teams, and access coverage.",
+    permission: "admin_overview",
+  },
+  prompt: {
+    title: "Prompt",
+    eyebrow: "AI Control",
+    description: "Manage the live audit prompt while keeping the original trusted prompt untouched.",
+    permission: "admin_prompt",
+  },
+  "api-vault": {
+    title: "API Vault",
+    eyebrow: "Security",
+    description: "Owner-only storage for Intercom and OpenAI keys.",
+    permission: "admin_api_vault",
+  },
+  disputes: {
+    title: "Dispute Management",
+    eyebrow: "Quality Review",
+    description: "Review disputed AI verdicts and approve or reject changes.",
+    permission: "admin_disputes",
+  },
+  snippets: {
+    title: "Calibration Snippets",
+    eyebrow: "AI Calibration",
+    description: "Convert approved disputes into active AI guidance for future audits.",
+    permission: "admin_snippets",
+  },
+  "supervisor-teams": {
+    title: "Supervisor Teams",
+    eyebrow: "People & Access",
+    description: "Manage supervisor-to-employee team visibility and filters.",
+    permission: "admin_supervisor_teams",
+  },
+  roles: {
+    title: "Roles & Permissions",
+    eyebrow: "Owner Governance",
+    description: "Control role grants and the permission matrix. Owner access is permanently locked.",
+    permission: "admin_roles",
+  },
+  mappings: {
+    title: "Agent Mappings",
+    eyebrow: "People & Access",
+    description: "Map Intercom agents to employee names, emails, and teams.",
+    permission: "admin_mappings",
+  },
+  "activity-logs": {
+    title: "Activity Logs",
+    eyebrow: "Monitoring",
+    description: "Review sign-ins, page visits, admin changes, and session history.",
+    permission: "admin_activity_logs",
+  },
+};
 
 const API_KEY_TYPES = [
   {
@@ -684,40 +859,19 @@ function buildFallbackProfile(user) {
 }
 
 function canManageAdmin(profile) {
-  const role = normalizeKey(profile?.role);
-
-  return Boolean(
-    profile?.is_active === true &&
-      (role === "master_admin" || role === "admin" || role === "co_admin")
-  );
+  return hasPermission(profile, "page_admin");
 }
 
 function canManageUsers(profile) {
-  const email = normalizeEmail(profile?.email);
-  const role = normalizeKey(profile?.role);
-
-  return Boolean(
-    profile?.is_active === true &&
-      (email === MASTER_ADMIN_EMAIL || role === "master_admin" || role === "admin")
-  );
+  return hasPermission(profile, "admin_roles");
 }
 
 function canManageApiKeys(profile) {
-  const email = normalizeEmail(profile?.email);
-  const role = normalizeKey(profile?.role);
-
-  return Boolean(
-    profile?.is_active === true && email === MASTER_ADMIN_EMAIL && role === "master_admin"
-  );
+  return hasPermission(profile, "admin_api_vault");
 }
 
 function canViewActivityLogs(profile) {
-  const email = normalizeEmail(profile?.email);
-  const role = normalizeKey(profile?.role);
-
-  return Boolean(
-    profile?.is_active === true && (email === MASTER_ADMIN_EMAIL || role === "master_admin")
-  );
+  return hasPermission(profile, "admin_activity_logs");
 }
 
 function createEmptyActivityFilters() {
@@ -770,7 +924,9 @@ function apiTypeLabel(keyType) {
   return API_KEY_TYPES.find((item) => item.value === keyType)?.label || keyType;
 }
 
-function roleLabel(role) {
+function roleLabel(role, email = "") {
+  if (normalizeEmail(email) === MASTER_ADMIN_EMAIL || role === "platform_owner") return "Platform Owner";
+
   const found = ROLE_OPTIONS.find((item) => item.value === role);
   if (found) return found.label;
 
@@ -785,6 +941,47 @@ function roleLabel(role) {
 function roleDescription(role) {
   const found = ROLE_OPTIONS.find((item) => item.value === role);
   return found?.description || "Legacy or custom role.";
+}
+
+function isPlatformOwner(profile, session = null) {
+  return normalizeEmail(profile?.email || session?.user?.email) === MASTER_ADMIN_EMAIL;
+}
+
+function getRoleKey(profile) {
+  return normalizeKey(profile?.role) || "viewer";
+}
+
+function buildPermissionSet(profile, session = null) {
+  if (isPlatformOwner(profile, session)) return OWNER_PERMISSIONS;
+
+  const role = getRoleKey(profile);
+  return {
+    ...(DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.viewer),
+    ...(profile?.permissions || {}),
+  };
+}
+
+function hasPermission(profile, key, session = null) {
+  if (profile?.is_active !== true) return false;
+  return Boolean(buildPermissionSet(profile, session)[key]);
+}
+
+function normalizePermissionRows(rows) {
+  const byRole = new Map((rows || []).map((row) => [row.role_key, row]));
+
+  return ROLE_OPTIONS.map((role) => {
+    const row = byRole.get(role.value);
+    return {
+      role_key: role.value,
+      permissions: {
+        ...(DEFAULT_ROLE_PERMISSIONS[role.value] || DEFAULT_ROLE_PERMISSIONS.viewer),
+        ...(row?.permissions || {}),
+      },
+      updated_at: row?.updated_at || null,
+      updated_by_email: row?.updated_by_email || null,
+      locked: role.value === "master_admin" ? ["admin_roles", "admin_api_vault"] : [],
+    };
+  });
 }
 
 function getMemberKey(member) {
@@ -1120,6 +1317,7 @@ async function readApiJson(response) {
 }
 
 export default function AdminPage() {
+  const searchParams = useSearchParams();
   const mappingFormRef = useRef(null);
   const roleFormRef = useRef(null);
   const supervisorFormRef = useRef(null);
@@ -1159,6 +1357,11 @@ export default function AdminPage() {
   const [roleSearch, setRoleSearch] = useState("");
   const [roleCandidateSearch, setRoleCandidateSearch] = useState("");
   const [roleSaveLoading, setRoleSaveLoading] = useState(false);
+  const [permissionCatalog, setPermissionCatalog] = useState(PERMISSION_CATALOG);
+  const [permissionRows, setPermissionRows] = useState(normalizePermissionRows([]));
+  const [permissionEditable, setPermissionEditable] = useState(false);
+  const [permissionLoading, setPermissionLoading] = useState(false);
+  const [permissionSaveLoading, setPermissionSaveLoading] = useState(false);
 
   const [apiKeys, setApiKeys] = useState([]);
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
@@ -1197,6 +1400,10 @@ export default function AdminPage() {
   const canManageUsersNow = canManageUsers(profile);
   const canManageApiKeysNow = canManageApiKeys(profile);
   const canViewActivityLogsNow = canViewActivityLogs(profile);
+  const activeSectionKey = searchParams.get("section") || "overview";
+  const activeSectionMeta = ADMIN_SECTION_META[activeSectionKey] || ADMIN_SECTION_META.overview;
+  const canViewActiveSection = activeSectionKey === "overview" ? isAdmin : hasPermission(profile, activeSectionMeta.permission);
+  const isOwnerNow = isPlatformOwner(profile, session);
 
   const activityActionOptions = useMemo(() => {
     const values = new Set(activityLogs.map((row) => normalizeText(row.action_type)).filter(Boolean));
@@ -1257,7 +1464,7 @@ export default function AdminPage() {
     return nextSession;
   }
 
-  async function loadProfile(user) {
+  async function loadProfile(user, activeSession = null) {
     const email = normalizeEmail(user?.email);
     const domain = email.split("@")[1] || "";
 
@@ -1272,6 +1479,29 @@ export default function AdminPage() {
 
     const fallbackProfile = buildFallbackProfile(user);
 
+    if (activeSession?.access_token) {
+      try {
+        const response = await withTimeout(
+          fetch("/api/auth/profile", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${activeSession.access_token}`,
+            },
+            cache: "no-store",
+          }),
+          "Profile sync"
+        );
+
+        const data = await readApiJson(response);
+
+        if (response.ok && data?.ok && data?.profile) {
+          return { profile: data.profile, message: "" };
+        }
+      } catch (_error) {
+        // Fall through to direct profile lookup so Admin does not lock if profile sync is temporarily slow.
+      }
+    }
+
     try {
       const { data, error } = await withTimeout(
         supabase
@@ -1283,7 +1513,7 @@ export default function AdminPage() {
       );
 
       if (error) {
-        if (fallbackProfile) return { profile: fallbackProfile, message: "" };
+        if (fallbackProfile) return { profile: { ...fallbackProfile, permissions: buildPermissionSet(fallbackProfile) }, message: "" };
 
         return {
           profile: null,
@@ -1298,31 +1528,35 @@ export default function AdminPage() {
               ...data,
               email,
               role: "master_admin",
+              access_tier: "platform_owner",
               can_run_tests: true,
               is_active: true,
+              permissions: OWNER_PERMISSIONS,
             },
             message: "",
           };
         }
 
-        return { profile: data, message: "" };
+        return { profile: { ...data, permissions: buildPermissionSet(data) }, message: "" };
       }
 
-      if (fallbackProfile) return { profile: fallbackProfile, message: "" };
+      if (fallbackProfile) return { profile: { ...fallbackProfile, permissions: buildPermissionSet(fallbackProfile) }, message: "" };
+
+      const viewerProfile = {
+        id: user.id,
+        email,
+        full_name: user.user_metadata?.full_name || "",
+        role: "viewer",
+        can_run_tests: false,
+        is_active: true,
+      };
 
       return {
-        profile: {
-          id: user.id,
-          email,
-          full_name: user.user_metadata?.full_name || "",
-          role: "viewer",
-          can_run_tests: false,
-          is_active: true,
-        },
+        profile: { ...viewerProfile, permissions: buildPermissionSet(viewerProfile) },
         message: "Signed in, but this account has not been granted Admin access.",
       };
     } catch (error) {
-      if (fallbackProfile) return { profile: fallbackProfile, message: "" };
+      if (fallbackProfile) return { profile: { ...fallbackProfile, permissions: buildPermissionSet(fallbackProfile) }, message: "" };
 
       return {
         profile: null,
@@ -1470,6 +1704,98 @@ export default function AdminPage() {
     }
   }
 
+
+  async function loadRolePermissionsData(activeSession, allowed = canManageUsersNow) {
+    if (!allowed || !activeSession?.access_token) {
+      setPermissionRows(normalizePermissionRows([]));
+      setPermissionEditable(false);
+      return;
+    }
+
+    setPermissionLoading(true);
+
+    try {
+      const response = await withTimeout(
+        fetch("/api/admin/role-permissions", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${activeSession.access_token}`,
+          },
+          cache: "no-store",
+        }),
+        "Loading role permissions"
+      );
+
+      const data = await readApiJson(response);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Could not load role permissions.");
+      }
+
+      setPermissionCatalog(Array.isArray(data.catalog) ? data.catalog : PERMISSION_CATALOG);
+      setPermissionRows(normalizePermissionRows(data.roles || []));
+      setPermissionEditable(Boolean(data.editable));
+    } finally {
+      setPermissionLoading(false);
+    }
+  }
+
+  function updatePermission(roleKey, permissionKey, checked) {
+    setPermissionRows((prev) =>
+      prev.map((row) => {
+        if (row.role_key !== roleKey) return row;
+        if (row.locked?.includes(permissionKey)) return row;
+
+        return {
+          ...row,
+          permissions: {
+            ...row.permissions,
+            [permissionKey]: checked,
+          },
+        };
+      })
+    );
+  }
+
+  async function handleSaveRolePermissions() {
+    if (!session?.access_token) {
+      setPageError("Please sign in again before saving role permissions.");
+      return;
+    }
+
+    setPermissionSaveLoading(true);
+    setPageError("");
+    setPageSuccess("");
+
+    try {
+      const response = await withTimeout(
+        fetch("/api/admin/role-permissions", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ roles: permissionRows }),
+        }),
+        "Saving role permissions"
+      );
+
+      const data = await readApiJson(response);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Could not save role permissions.");
+      }
+
+      setPermissionCatalog(Array.isArray(data.catalog) ? data.catalog : PERMISSION_CATALOG);
+      setPermissionRows(normalizePermissionRows(data.roles || []));
+      setPermissionEditable(Boolean(data.editable));
+      setPageSuccess(data.message || "Role permissions saved.");
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Could not save role permissions.");
+    } finally {
+      setPermissionSaveLoading(false);
+    }
+  }
 
   async function loadApiKeysData(activeSession, allowed = canManageApiKeysNow) {
     if (!allowed || !activeSession?.access_token) {
@@ -1729,6 +2055,7 @@ export default function AdminPage() {
       loadMappingsData(),
       loadSupervisorTeamsData(activeSession),
       loadRoleAccessData(activeSession, canManageUsers(effectiveProfile)),
+      loadRolePermissionsData(activeSession, canManageUsers(effectiveProfile)),
     ];
 
     if (allowApiKeys) {
@@ -1780,7 +2107,7 @@ export default function AdminPage() {
         return;
       }
 
-      const profileResult = await loadProfile(currentSession.user);
+      const profileResult = await loadProfile(currentSession.user, currentSession);
       setProfile(profileResult.profile);
       setAuthMessage(profileResult.message || "");
       setAuthChecked(true);
@@ -1824,7 +2151,7 @@ export default function AdminPage() {
         return;
       }
 
-      loadProfile(nextSession.user).then((result) => {
+      loadProfile(nextSession.user, nextSession).then((result) => {
         if (!active) return;
 
         setProfile(result.profile);
@@ -2983,7 +3310,7 @@ export default function AdminPage() {
 
         <div className="hero-side-card">
           <span>Current Access</span>
-          <strong>{authChecked ? roleLabel(profile?.role) : "Checking..."}</strong>
+          <strong>{authChecked ? roleLabel(profile?.role, profile?.email || session?.user?.email) : "Checking..."}</strong>
           <small>{profile?.email || session?.user?.email || "Not signed in"}</small>
         </div>
 
@@ -3008,23 +3335,15 @@ export default function AdminPage() {
             </button>
           </div>
 
-          <div className="admin-quick-nav" aria-label="Admin quick navigation">
-            <a href="#live-prompt">Prompt</a>
-            {canManageApiKeysNow ? <a href="#api-vault">API Vault</a> : null}
-            {canViewActivityLogsNow ? (
-              <>
-                <a href="#system-activity-logs">Activity Logs</a>
-                <a href="#dispute-management">Dispute Management</a>
-                <a href="#calibration-snippets">Calibration Snippets</a>
-              </>
-            ) : null}
-            <a href="#supervisor-teams">Supervisor Teams</a>
-            <a href="#user-roles">Roles</a>
-            <a href="#agent-mappings">Mappings</a>
+          <div className="admin-section-indicator" aria-label="Selected Admin section">
+            <span>{activeSectionMeta.eyebrow}</span>
+            <strong>{activeSectionMeta.title}</strong>
+            <small>{activeSectionMeta.description}</small>
           </div>
         </div>
       </section>
 
+      {activeSectionKey === "overview" ? (
       <section className="status-grid">
         {statusCards.map((card) => (
           <article key={card.label} className={`stat-card ${card.tone}`}>
@@ -3034,6 +3353,7 @@ export default function AdminPage() {
           </article>
         ))}
       </section>
+      ) : null}
 
       {(pageError || pageSuccess || authMessage) && (
         <section className="message-stack">
@@ -3060,8 +3380,8 @@ export default function AdminPage() {
         </section>
       ) : (
         <>
-          {canViewActivityLogsNow ? (
-            <section className="panel wide activity-panel" id="system-activity-logs">
+          {canViewActivityLogsNow && activeSectionKey === "activity-logs" ? (
+            <section className="panel wide activity-panel admin-section-panel" id="system-activity-logs">
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Master Admin Only</p>
@@ -3398,8 +3718,8 @@ export default function AdminPage() {
             </section>
           ) : null}
 
-          {canViewActivityLogsNow ? (
-            <section className="panel wide" id="dispute-management">
+          {canViewActivityLogsNow && activeSectionKey === "disputes" ? (
+            <section className="panel wide admin-section-panel" id="dispute-management">
               <div className="section-head">
                 <div>
                   <p className="eyebrow">Master Admin Only</p>
@@ -3492,11 +3812,13 @@ export default function AdminPage() {
             </section>
           ) : null}
 
-          {canViewActivityLogsNow ? (
+          {hasPermission(profile, "admin_snippets") && activeSectionKey === "snippets" ? (
             <CalibrationSnippetsPanel session={session} />
           ) : null}
 
-          <section className={canManageApiKeysNow ? "control-grid" : "control-grid single-column"}>
+          {(activeSectionKey === "prompt" || activeSectionKey === "api-vault") ? (
+          <section className={activeSectionKey === "api-vault" ? "control-grid single-column" : "control-grid single-column"}>
+            {activeSectionKey === "prompt" ? (
             <article className="panel prompt-panel" id="live-prompt">
               <div className="section-head">
                 <div>
@@ -3547,8 +3869,9 @@ export default function AdminPage() {
                 />
               </details>
             </article>
+            ) : null}
 
-            {canManageApiKeysNow ? (
+            {canManageApiKeysNow && activeSectionKey === "api-vault" ? (
               <article className="panel api-panel" id="api-vault">
                 <div className="section-head">
                   <div>
@@ -3695,8 +4018,10 @@ export default function AdminPage() {
               </article>
             ) : null}
           </section>
+          ) : null}
 
-          <section className="control-grid supervisor-area" id="supervisor-teams" ref={supervisorFormRef}>
+          {hasPermission(profile, "admin_supervisor_teams") && activeSectionKey === "supervisor-teams" ? (
+          <section className="control-grid supervisor-area admin-section-panel" id="supervisor-teams" ref={supervisorFormRef}>
             <article className="panel supervisor-builder">
               <div className="section-head">
                 <div>
@@ -3986,8 +4311,11 @@ export default function AdminPage() {
               )}
             </article>
           </section>
+          ) : null}
 
-          <section className="control-grid mapping-area" id="mapping-workbench">
+          {hasPermission(profile, "admin_mappings") && activeSectionKey === "mappings" ? (
+          <>
+          <section className="control-grid mapping-area admin-section-panel" id="mapping-workbench">
             <article className="panel" ref={mappingFormRef}>
               <div className="section-head">
                 <div>
@@ -4160,7 +4488,7 @@ export default function AdminPage() {
             </article>
           </section>
 
-          <section className="control-grid mapping-support-grid">
+          <section className="control-grid mapping-support-grid admin-section-panel">
             <article className="panel">
               <div className="section-head">
                 <div>
@@ -4246,8 +4574,11 @@ export default function AdminPage() {
               </div>
             </article>
           </section>
+          </>
+          ) : null}
 
-          <section className="panel wide" id="user-roles" ref={roleFormRef}>
+          {hasPermission(profile, "admin_roles") && activeSectionKey === "roles" ? (
+          <section className="panel wide admin-section-panel" id="user-roles" ref={roleFormRef}>
             <div className="section-head">
               <div>
                 <p className="eyebrow">Access control</p>
@@ -4260,6 +4591,99 @@ export default function AdminPage() {
               <span className={canManageUsersNow ? "status active" : "status inactive"}>
                 {canManageUsersNow ? "Role Manager" : "Read only"}
               </span>
+            </div>
+
+            <div className="owner-lock-card">
+              <div>
+                <p className="eyebrow">Platform Owner Lock</p>
+                <h3>faiyaz@nextventures.io is the permanent owner.</h3>
+                <p className="muted">This owner access is not editable from the app. API Vault and Roles & Permissions remain owner-locked even above Master Admin.</p>
+              </div>
+              <span className="status active">Owner Protected</span>
+            </div>
+
+            <div className="permission-matrix-card">
+              <div className="section-head compact">
+                <div>
+                  <p className="eyebrow">Permission Matrix</p>
+                  <h3>Role Access Control</h3>
+                  <p className="muted">Check which role can access each area. Locked permissions are reserved for the Platform Owner.</p>
+                </div>
+
+                <div className="action-row">
+                  <span className={permissionEditable ? "status active" : "status inactive"}>
+                    {permissionEditable ? "Editable by Owner" : "Read only"}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={handleSaveRolePermissions}
+                    disabled={!permissionEditable || permissionSaveLoading}
+                  >
+                    {permissionSaveLoading ? "Saving..." : "Save Permissions"}
+                  </button>
+                </div>
+              </div>
+
+              {permissionLoading ? (
+                <div className="empty-box">Loading permission matrix...</div>
+              ) : (
+                <div className="permission-matrix-scroll">
+                  <table className="permission-matrix-table">
+                    <thead>
+                      <tr>
+                        <th>Permission</th>
+                        {ROLE_OPTIONS.map((role) => (
+                          <th key={role.value}>{role.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(
+                        permissionCatalog.reduce((groups, item) => {
+                          const group = item.group || "Other";
+                          groups[group] = groups[group] || [];
+                          groups[group].push(item);
+                          return groups;
+                        }, {})
+                      ).map(([group, items]) => (
+                        <Fragment key={group}>
+                          <tr className="permission-group-row">
+                            <td colSpan={ROLE_OPTIONS.length + 1}>{group}</td>
+                          </tr>
+                          {items.map((item) => (
+                            <tr key={item.key}>
+                              <td>
+                                <strong>{item.label}</strong>
+                                {item.ownerLocked ? <small>Owner locked</small> : null}
+                              </td>
+                              {ROLE_OPTIONS.map((role) => {
+                                const row = permissionRows.find((entry) => entry.role_key === role.value);
+                                const checked = Boolean(row?.permissions?.[item.key]);
+                                const locked = item.ownerLocked || row?.locked?.includes(item.key);
+                                return (
+                                  <td key={`${role.value}:${item.key}`}>
+                                    <label className={locked ? "matrix-check locked" : "matrix-check"}>
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        disabled={!permissionEditable || locked}
+                                        onChange={(event) => updatePermission(role.value, item.key, event.target.checked)}
+                                      />
+                                      <span>{locked ? "Locked" : checked ? "Allowed" : "Off"}</span>
+                                    </label>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="role-grid">
@@ -4469,8 +4893,10 @@ export default function AdminPage() {
               </div>
             </div>
           </section>
+          ) : null}
 
-          <section className="panel wide" id="agent-mappings">
+          {hasPermission(profile, "admin_mappings") && activeSectionKey === "mappings" ? (
+          <section className="panel wide admin-section-panel" id="agent-mappings">
             <div className="section-head">
               <div>
                 <p className="eyebrow">Mapping Table</p>
@@ -4654,8 +5080,10 @@ export default function AdminPage() {
               </div>
             )}
           </section>
+          ) : null}
 
-          <section className="panel wide" id="prompt-history">
+          {hasPermission(profile, "admin_prompt") && activeSectionKey === "prompt" ? (
+          <section className="panel wide admin-section-panel" id="prompt-history">
             <div className="section-head">
               <div>
                 <p className="eyebrow">Prompt History</p>
@@ -4704,6 +5132,15 @@ export default function AdminPage() {
               </div>
             )}
           </section>
+          ) : null}
+
+          {!canViewActiveSection ? (
+            <section className="panel gate-panel">
+              <p className="eyebrow">Section Locked</p>
+              <h2>You do not have access to this Admin section.</h2>
+              <p className="muted">Ask the Platform Owner if this permission should be added to your role.</p>
+            </section>
+          ) : null}
         </>
       )}
 
@@ -6964,4 +7401,175 @@ const adminStyles = `
     letter-spacing: .01em;
   }
 
+
+  .admin-section-indicator {
+    min-width: min(440px, 100%);
+    padding: 18px 20px;
+    border-radius: 24px;
+    border: 1px solid rgba(125, 211, 252, 0.14);
+    background:
+      linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(35, 28, 74, 0.72));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 22px 60px rgba(0,0,0,0.22);
+  }
+
+  .admin-section-indicator span,
+  .admin-section-indicator small {
+    display: block;
+  }
+
+  .admin-section-indicator span {
+    color: #93c5fd;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .admin-section-indicator strong {
+    display: block;
+    margin-top: 5px;
+    color: #f8fbff;
+    font-size: 1.15rem;
+  }
+
+  .admin-section-indicator small {
+    margin-top: 5px;
+    color: #aebce1;
+    line-height: 1.5;
+  }
+
+  .owner-lock-card,
+  .permission-matrix-card {
+    margin: 18px 0;
+    border-radius: 24px;
+    border: 1px solid rgba(125, 211, 252, 0.13);
+    background:
+      radial-gradient(circle at 12% 18%, rgba(34, 211, 238, 0.08), transparent 34%),
+      linear-gradient(135deg, rgba(12, 19, 35, 0.94), rgba(18, 24, 40, 0.9));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 54px rgba(0,0,0,0.2);
+  }
+
+  .owner-lock-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .owner-lock-card h3,
+  .permission-matrix-card h3 {
+    margin: 4px 0 6px;
+    color: #f8fbff;
+    font-size: 1.15rem;
+  }
+
+  .permission-matrix-card {
+    padding: 20px;
+  }
+
+  .section-head.compact {
+    margin-bottom: 16px;
+  }
+
+  .permission-matrix-scroll {
+    max-height: 620px;
+    overflow: auto;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(3, 7, 18, 0.34);
+  }
+
+  .permission-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 980px;
+  }
+
+  .permission-matrix-table th,
+  .permission-matrix-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.11);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .permission-matrix-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    color: #b9c6ee;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: rgba(10, 15, 30, 0.98);
+  }
+
+  .permission-matrix-table td:first-child {
+    min-width: 260px;
+  }
+
+  .permission-matrix-table td strong,
+  .permission-matrix-table td small {
+    display: block;
+  }
+
+  .permission-matrix-table td strong {
+    color: #f8fbff;
+    font-size: 0.8rem;
+  }
+
+  .permission-matrix-table td small {
+    margin-top: 3px;
+    color: #f8b4b4;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .permission-group-row td {
+    color: #93c5fd;
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    background: rgba(30, 41, 59, 0.62);
+  }
+
+  .matrix-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 92px;
+    padding: 7px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(15, 23, 42, 0.68);
+    color: #bfdbfe;
+    font-size: 0.72rem;
+    font-weight: 850;
+  }
+
+  .matrix-check input {
+    width: 14px;
+    height: 14px;
+    accent-color: #22c55e;
+  }
+
+  .matrix-check.locked {
+    color: #f8b4b4;
+    border-color: rgba(248, 113, 113, 0.2);
+    background: rgba(127, 29, 29, 0.16);
+  }
+
+  .activity-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-session-list,
+  .session-list,
+  .recent-session-list {
+    max-height: 420px;
+    overflow: auto;
+  }
 `;
