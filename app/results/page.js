@@ -261,6 +261,11 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+
+  useEffect(() => {
+    setDisputeOpen(false);
+  }, [conversationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,6 +300,18 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
   if (!conversationId) return null;
   const messages = normalizePreviewMessages(data);
   const mergedMetadata = useMemo(() => buildPreviewMetadata(data?.metadata || {}, previewContext), [data, previewContext]);
+  const disputeResultContext = useMemo(() => ({
+    ...(previewContext || {}),
+    conversation_id: conversationId,
+    agent_name: previewText(previewContext?.agent_name, mergedMetadata.assignedAgent),
+    employee_name: previewText(previewContext?.employee_name, mergedMetadata.assignedAgent),
+    employee_email: previewText(previewContext?.employee_email),
+    team_name: previewText(previewContext?.team_name, mergedMetadata.teamName),
+    review_sentiment: previewText(previewContext?.review_sentiment, mergedMetadata.reviewApproach),
+    client_sentiment: previewText(previewContext?.client_sentiment, mergedMetadata.clientSentiment),
+    resolution_status: previewText(previewContext?.resolution_status, mergedMetadata.resolutionStatus),
+    replied_at: previewContext?.replied_at || previewContext?.created_at || mergedMetadata.updatedAt || mergedMetadata.createdAt || null,
+  }), [previewContext, conversationId, mergedMetadata]);
   const auditResultCards = [
     { label: "Review Approach", value: mergedMetadata.reviewApproach || "", tone: "review" },
     { label: "Client Sentiment", value: mergedMetadata.clientSentiment || "", tone: "client" },
@@ -333,6 +350,13 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
             </span>
           </div>
           <div className="conversation-preview-actions">
+            <button
+              type="button"
+              className={`secondary-btn dispute-action ${disputeOpen ? "active" : ""}`}
+              onClick={() => setDisputeOpen((current) => !current)}
+            >
+              {disputeOpen ? "Close Dispute" : "Dispute Verdict"}
+            </button>
             <a href={intercomConversationUrl(conversationId)} target="_blank" rel="noreferrer" className="secondary-btn">Open on Intercom</a>
             <button type="button" className="secondary-btn light-action" onClick={onClose}>Close</button>
           </div>
@@ -353,7 +377,7 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                 ))}
               </div>
             ) : null}
-            <div className="conversation-preview-body">
+            <div className={`conversation-preview-body ${disputeOpen ? "has-dispute" : ""}`}>
               <aside className="conversation-preview-sidebar">
                 <div className="conversation-preview-sidebar-title">
                   <span>Case Details</span>
@@ -415,6 +439,17 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                   }) : <div className="conversation-preview-empty">No renderable text was returned. Open on Intercom to see this conversation.</div>}
                 </div>
               </section>
+              {disputeOpen ? (
+                <aside className="conversation-preview-dispute-panel">
+                  <DisputeVerdictButton
+                    result={disputeResultContext}
+                    panelMode="inline"
+                    hideButton
+                    open={disputeOpen}
+                    onOpenChange={setDisputeOpen}
+                  />
+                </aside>
+              ) : null}
             </div>
           </div>
         )}
