@@ -672,44 +672,66 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
   const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
   useEffect(() => {
     setDisputeOpen(false);
+    setDisputeSubmitted(false);
   }, [conversationId]);
 
   useEffect(() => {
     let cancelled = false;
+    let controller = null;
+    let hardTimeoutId = null;
+
     async function loadPreview() {
       if (!conversationId) return;
       setLoading(true);
       setError("");
       setData(null);
+
+      controller = new AbortController();
+      hardTimeoutId = setTimeout(() => {
+        if (cancelled) return;
+        controller?.abort();
+        setError("The full Intercom preview is taking too long to load. You can still review the stored AI verdict and open the conversation on Intercom.");
+        setLoading(false);
+      }, 18000);
+
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
         if (!token) throw new Error("Your session expired. Please refresh and sign in again.");
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
         const response = await fetch("/api/intercom/conversation-preview", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-          body: JSON.stringify({ conversationId }),
+          body: JSON.stringify({ conversationId, resultId: previewContext?.id || previewContext?.result_id || null }),
           cache: "no-store",
           signal: controller.signal,
         });
-        clearTimeout(timeoutId);
+
         const payload = await response.json().catch(() => null);
         if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Preview is not available for this conversation.");
         if (!cancelled) setData(payload);
       } catch (previewError) {
-        if (!cancelled) setError(previewError?.name === "AbortError" ? "Preview took too long to load. Please try again or open the conversation on Intercom." : (previewError instanceof Error ? previewError.message : "Preview is not available for this conversation."));
+        if (!cancelled) {
+          setError(previewError?.name === "AbortError" ? "The full Intercom preview is taking too long to load. You can still review the stored AI verdict and open the conversation on Intercom." : (previewError instanceof Error ? previewError.message : "Preview is not available for this conversation."));
+        }
       } finally {
+        if (hardTimeoutId) clearTimeout(hardTimeoutId);
         if (!cancelled) setLoading(false);
       }
     }
+
     loadPreview();
-    return () => { cancelled = true; };
-  }, [conversationId]);
+
+    return () => {
+      cancelled = true;
+      if (hardTimeoutId) clearTimeout(hardTimeoutId);
+      controller?.abort();
+    };
+  }, [conversationId, previewContext?.id, previewContext?.result_id]);
 
   if (!conversationId) return null;
   const messages = normalizePreviewMessages(data);
@@ -766,10 +788,12 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
           <div className="conversation-preview-actions">
             <button
               type="button"
-              className={`secondary-btn dispute-action ${disputeOpen ? "active" : ""}`}
-              onClick={() => setDisputeOpen((current) => !current)}
+              className={`secondary-btn dispute-action ${disputeOpen ? "active" : ""} ${disputeSubmitted ? "submitted" : ""}`}
+              onClick={() => { if (!disputeSubmitted) setDisputeOpen((current) => !current); }}
+              disabled={disputeSubmitted}
+              title={disputeSubmitted ? "Dispute request submitted." : "Dispute this Review Status verdict."}
             >
-              {disputeOpen ? "Close Dispute" : "Dispute Verdict"}
+              {disputeSubmitted ? "Dispute Request Submitted" : disputeOpen ? "Close Dispute" : "Dispute Verdict"}
             </button>
             <a href={conversationUrl(conversationId)} target="_blank" rel="noreferrer" className="secondary-btn">Open on Intercom</a>
             <button type="button" className="secondary-btn light-action" onClick={onClose}>Close</button>
@@ -777,10 +801,11 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
         </div>
         {loading ? (
           <div className="conversation-preview-loading">Loading the full Intercom conversation...</div>
-        ) : error ? (
-          <div className="conversation-preview-error"><strong>Preview Not Available</strong><span>{error}</span><small>Open on Intercom to see this conversation.</small></div>
         ) : (
           <div className="conversation-preview-loaded">
+            {error ? (
+              <div className="conversation-preview-error inline"><strong>Preview Not Available</strong><span>{error}</span><small>Open on Intercom to see this conversation.</small></div>
+            ) : null}
             {auditResultCards.length ? (
               <div className="conversation-preview-result-strip">
                 {auditResultCards.map((card) => (
@@ -861,6 +886,7 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                     hideButton
                     open={disputeOpen}
                     onOpenChange={setDisputeOpen}
+                    onSubmitted={() => setDisputeSubmitted(true)}
                   />
                 </aside>
               ) : null}
