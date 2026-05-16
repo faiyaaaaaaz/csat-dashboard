@@ -75,6 +75,18 @@ function normalizeTextSelections(values) {
   );
 }
 
+function normalizeConversationIdSelections(value) {
+  const source = Array.isArray(value) ? value.join(",") : String(value || "");
+  return Array.from(
+    new Set(
+      source
+        .split(/[\s,]+/)
+        .map((item) => item.trim())
+        .filter((item) => /^\d{5,}$/.test(item))
+    )
+  ).slice(0, 50);
+}
+
 function numberMatchesFilter(value, selectedNumbers) {
   if (!Array.isArray(selectedNumbers) || selectedNumbers.length === 0) return true;
   const number = Number(value);
@@ -439,6 +451,27 @@ function extractConversationPreview(conversation, adminLookup) {
   };
 }
 
+async function fetchSpecificConversationPreviews({ intercomApiKey, conversationIds, adminLookup }) {
+  const conversations = [];
+  const failed = [];
+
+  for (const conversationId of conversationIds) {
+    try {
+      const params = new URLSearchParams({ display_as: "plaintext" });
+      const fullConversation = await intercomGet({ intercomApiKey, path: `/conversations/${conversationId}?${params.toString()}` });
+      const preview = extractConversationPreview(fullConversation, adminLookup);
+      conversations.push({ ...preview, conversationId: preview.conversationId || conversationId });
+    } catch (error) {
+      failed.push({
+        conversationId,
+        error: error instanceof Error ? error.message : "Could not fetch this conversation.",
+      });
+    }
+  }
+
+  return { conversations, failed };
+}
+
 function buildSearchBody({ sinceTs, untilTs, startingAfter, conversationRatings, selectedAdminAssigneeIds }) {
   const values = [
     { field: "created_at", operator: ">", value: Number(sinceTs) },
@@ -713,17 +746,61 @@ export async function POST(request) {
     const alreadyFetchedCount = Math.max(0, Number(body?.alreadyFetchedCount || 0));
     const conversationRatings = normalizeNumberSelections(body?.conversationRatings, DEFAULT_CONVERSATION_RATINGS);
     const selectedIntercomAgentNames = normalizeTextSelections(body?.intercomAgentNames);
+    const specificConversationIds = normalizeConversationIdSelections(body?.conversationIds || body?.specificConversationIds);
+
+    const admins = await loadIntercomAdmins(intercomKey.value);
+    const adminLookup = buildAdminLookup(admins);
+
+    if (specificConversationIds.length > 0) {
+      const directResult = await fetchSpecificConversationPreviews({
+        intercomApiKey: intercomKey.value,
+        conversationIds: specificConversationIds,
+        adminLookup,
+      });
+
+      return json({
+        ok: true,
+        done: true,
+        conversations: directResult.conversations,
+        fetchState: {
+          mode: "specific_conversation_ids",
+          requestedIds: specificConversationIds,
+          done: true,
+        },
+        message: directResult.conversations.length
+          ? "Specific conversation(s) fetched successfully."
+          : "No matching conversations were returned for the entered conversation ID(s).",
+        meta: {
+          startDate: startDate || null,
+          endDate: endDate || null,
+          limiterEnabled: false,
+          limitCount: null,
+          alreadyFetchedCount,
+          fetchedCount: directResult.conversations.length,
+          pageFetchedCount: directResult.conversations.length,
+          fetchMode: "specific_conversation_ids",
+          requestedConversationIds: specificConversationIds,
+          failedConversationIds: directResult.failed,
+          filters: {
+            conversationIds: specificConversationIds,
+            otherFiltersIgnored: true,
+          },
+          auth: {
+            tokenSource: intercomKey.source,
+            tokenFingerprint: intercomKey.fingerprint,
+          },
+        },
+      });
+    }
 
     if (!startDate || !endDate) {
-      return json({ ok: false, error: "Start date and end date are required." }, { status: 400 });
+      return json({ ok: false, error: "Start date and end date are required unless specific conversation IDs are provided." }, { status: 400 });
     }
 
     const desiredCount = limiterEnabled
       ? Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 5, 20000))
       : 20000;
 
-    const admins = await loadIntercomAdmins(intercomKey.value);
-    const adminLookup = buildAdminLookup(admins);
     const selectedAdminResolution = resolveSelectedAdminIds(selectedIntercomAgentNames, adminLookup);
 
     const hasSelectedAgentFilter = selectedIntercomAgentNames.length > 0;
