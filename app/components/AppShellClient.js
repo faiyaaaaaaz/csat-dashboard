@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
@@ -15,6 +15,140 @@ const navItems = [
   { label: "Results", href: "/results", permission: "results", icon: "results" },
   { label: "Admin", href: "/admin", permission: "admin", icon: "shield" },
 ];
+
+const ADMIN_NAV_GROUPS = [
+  {
+    label: "Control",
+    items: [
+      { key: "overview", label: "Overview", icon: "grid", permission: "admin_overview" },
+    ],
+  },
+  {
+    label: "AI Control",
+    items: [
+      { key: "prompt", label: "Prompt", icon: "prompt", permission: "admin_prompt" },
+      { key: "snippets", label: "Calibration Snippets", icon: "spark", permission: "admin_snippets" },
+    ],
+  },
+  {
+    label: "Quality Review",
+    items: [
+      { key: "disputes", label: "Dispute Management", icon: "alert", permission: "admin_disputes" },
+    ],
+  },
+  {
+    label: "People & Access",
+    items: [
+      { key: "roles", label: "Roles & Permissions", icon: "shield", permission: "admin_roles" },
+      { key: "supervisor-teams", label: "Supervisor Teams", icon: "team", permission: "admin_supervisor_teams" },
+      { key: "mappings", label: "Agent Mappings", icon: "link", permission: "admin_mappings" },
+    ],
+  },
+  {
+    label: "Security & System",
+    items: [
+      { key: "api-vault", label: "API Vault", icon: "key", permission: "admin_api_vault" },
+      { key: "activity-logs", label: "Activity Logs", icon: "clock", permission: "admin_activity_logs" },
+    ],
+  },
+];
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  master_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: true,
+    admin_overview: true,
+    admin_prompt: true,
+    admin_disputes: true,
+    admin_snippets: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_activity_logs: true,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  supervisor_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+  },
+  co_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: true,
+    admin_overview: true,
+    admin_prompt: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_disputes: false,
+    admin_snippets: false,
+    admin_activity_logs: false,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  audit_runner: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: false,
+  },
+  viewer: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+  },
+};
+
+function isPlatformOwner(profile, session) {
+  const email = normalizeEmail(profile?.email || session?.user?.email);
+  return email === MASTER_ADMIN_EMAIL;
+}
+
+function getRoleKey(profile) {
+  return String(profile?.role || "viewer").trim().toLowerCase();
+}
+
+function getPermissionSet(profile, session) {
+  if (isPlatformOwner(profile, session)) {
+    return {
+      page_dashboard: true,
+      page_results: true,
+      page_run_audit: true,
+      page_admin: true,
+      admin_overview: true,
+      admin_prompt: true,
+      admin_api_vault: true,
+      admin_disputes: true,
+      admin_snippets: true,
+      admin_supervisor_teams: true,
+      admin_roles: true,
+      admin_mappings: true,
+      admin_activity_logs: true,
+    };
+  }
+
+  return {
+    ...(DEFAULT_ROLE_PERMISSIONS[getRoleKey(profile)] || DEFAULT_ROLE_PERMISSIONS.viewer),
+    ...(profile?.permissions || {}),
+  };
+}
+
+function hasPermission(profile, session, permission) {
+  if (!profile?.is_active) return false;
+  return Boolean(getPermissionSet(profile, session)[permission]);
+}
+
+function getAdminNavItems(profile, session) {
+  return ADMIN_NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => hasPermission(profile, session, item.permission)),
+  })).filter((group) => group.items.length > 0);
+}
 
 function withTimeout(promise, label, timeoutMs = SESSION_TIMEOUT_MS) {
   let timeoutId;
@@ -69,7 +203,9 @@ function buildFallbackProfile(user) {
   return null;
 }
 
-function roleLabel(role) {
+function roleLabel(role, email = "") {
+  if (normalizeEmail(email) === MASTER_ADMIN_EMAIL) return "Platform Owner";
+
   const value = String(role || "viewer").replaceAll("_", " ");
 
   return value
@@ -129,6 +265,93 @@ function SidebarIcon({ kind, active = false }) {
     xmlns: "http://www.w3.org/2000/svg",
     'aria-hidden': 'true',
   };
+
+  if (kind === "grid") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <rect x="5" y="5" width="6" height="6" rx="1.5" stroke={stroke} strokeWidth="1.7" />
+          <rect x="13" y="5" width="6" height="6" rx="1.5" stroke={stroke} strokeWidth="1.7" />
+          <rect x="5" y="13" width="6" height="6" rx="1.5" stroke={stroke} strokeWidth="1.7" />
+          <rect x="13" y="13" width="6" height="6" rx="1.5" stroke={stroke} strokeWidth="1.7" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "prompt") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <path d="M7 4.5H15.5L19 8V19.5H7V4.5Z" stroke={stroke} strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M15.5 4.7V8.2H18.8" stroke={stroke} strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M10 12H16" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M10 15H14" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "key") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <circle cx="8.5" cy="12" r="3.2" stroke={stroke} strokeWidth="1.8" />
+          <path d="M11.7 12H20" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M16 12V15" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M19 12V14" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "team") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <circle cx="9" cy="8" r="2.6" stroke={stroke} strokeWidth="1.7" />
+          <circle cx="16" cy="9" r="2.1" stroke={stroke} strokeWidth="1.7" opacity="0.8" />
+          <path d="M4.8 18C5.4 15.2 7 13.8 9 13.8C11 13.8 12.6 15.2 13.2 18" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M13.6 17.2C14.2 15.6 15.3 14.8 16.7 14.8C18.2 14.8 19.3 15.8 19.8 17.8" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" opacity="0.8" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "link") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <path d="M9.5 7.5L10.8 6.2C12.4 4.6 15 4.6 16.6 6.2C18.2 7.8 18.2 10.4 16.6 12L15.3 13.3" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M14.5 16.5L13.2 17.8C11.6 19.4 9 19.4 7.4 17.8C5.8 16.2 5.8 13.6 7.4 12L8.7 10.7" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M9.8 14.2L14.2 9.8" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "clock") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <circle cx="12" cy="12" r="7" stroke={stroke} strokeWidth="1.8" />
+          <path d="M12 8.5V12.4L14.8 14" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (kind === "alert") {
+    return (
+      <span className="nav-link-icon" style={{ boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px ${glow}` }}>
+        <svg {...shared}>
+          <path d="M12 4.8L20 18.5H4L12 4.8Z" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M12 9.4V13" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 16H12.02" stroke={stroke} strokeWidth="2.3" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
 
   if (kind === "spark") {
     return (
@@ -194,35 +417,26 @@ function getInitials(nameOrEmail) {
   return value.slice(0, 2).toUpperCase();
 }
 
-function canRunAudits(profile) {
-  const role = String(profile?.role || "").toLowerCase();
-
+function canRunAudits(profile, session) {
   return Boolean(
     profile?.is_active === true &&
-      (role === "master_admin" ||
-        role === "admin" ||
-        profile?.can_run_tests === true)
+      (hasPermission(profile, session, "page_run_audit") || profile?.can_run_tests === true)
   );
 }
 
-function canAccessAdmin(profile) {
-  const role = String(profile?.role || "").toLowerCase();
-
-  return Boolean(
-    profile?.is_active === true &&
-      (role === "master_admin" || role === "admin" || role === "co_admin")
-  );
+function canAccessAdmin(profile, session) {
+  return Boolean(profile?.is_active === true && hasPermission(profile, session, "page_admin"));
 }
 
-function canViewResults(profile) {
-  return Boolean(profile?.is_active === true);
+function canViewResults(profile, session) {
+  return Boolean(profile?.is_active === true && hasPermission(profile, session, "page_results"));
 }
 
-function canViewNavItem(item, profile) {
-  if (item.permission === "dashboard") return true;
-  if (item.permission === "results") return canViewResults(profile);
-  if (item.permission === "run_audit") return canRunAudits(profile);
-  if (item.permission === "admin") return canAccessAdmin(profile);
+function canViewNavItem(item, profile, session) {
+  if (item.permission === "dashboard") return hasPermission(profile, session, "page_dashboard") || true;
+  if (item.permission === "results") return canViewResults(profile, session);
+  if (item.permission === "run_audit") return canRunAudits(profile, session);
+  if (item.permission === "admin") return canAccessAdmin(profile, session);
 
   return true;
 }
@@ -235,7 +449,7 @@ function getLockReason(pathname, session, profile) {
     };
   }
 
-  if (pathname === "/run" && !canRunAudits(profile)) {
+  if (pathname === "/run" && !canRunAudits(profile, session)) {
     return {
       title: "Permission required",
       message:
@@ -250,7 +464,7 @@ function getLockReason(pathname, session, profile) {
     };
   }
 
-  if (pathname === "/admin" && !canAccessAdmin(profile)) {
+  if (pathname === "/admin" && !canAccessAdmin(profile, session)) {
     return {
       title: "Admin Access Required",
       message:
@@ -265,7 +479,7 @@ function getLockReason(pathname, session, profile) {
     };
   }
 
-  if (pathname === "/results" && !canViewResults(profile)) {
+  if (pathname === "/results" && !canViewResults(profile, session)) {
     return {
       title: "Access required",
       message:
@@ -389,6 +603,7 @@ function LoginScreen({ authMessage, onGoogleLogin }) {
 
 export default function AppShellClient({ children }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const profileMenuRef = useRef(null);
   const authRunIdRef = useRef(0);
@@ -413,6 +628,8 @@ export default function AppShellClient({ children }) {
   const displayEmail = session?.user?.email || profile?.email || "";
   const lockReason = getLockReason(pathname, session, profile);
   const pageLocked = Boolean(!authLoading && lockReason);
+  const activeAdminSection = searchParams.get("section") || "overview";
+  const adminNavGroups = getAdminNavItems(profile, session);
 
   async function loadProfile(nextSession) {
     const user = nextSession?.user;
@@ -801,7 +1018,7 @@ export default function AppShellClient({ children }) {
 
             <div className="nav-list">
               {navItems.map((item) => {
-                const allowed = canViewNavItem(item, profile);
+                const allowed = canViewNavItem(item, profile, session);
                 const active =
                   item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
@@ -819,6 +1036,29 @@ export default function AppShellClient({ children }) {
                   </Link>
                 );
               })}
+
+              {pathname.startsWith("/admin") && adminNavGroups.length ? (
+                <div className="admin-subnav" aria-label="Admin sections">
+                  {adminNavGroups.map((group) => (
+                    <div className="admin-subnav-group" key={group.label}>
+                      <div className="admin-subnav-label">{group.label}</div>
+                      {group.items.map((item) => {
+                        const active = activeAdminSection === item.key;
+                        return (
+                          <Link
+                            key={item.key}
+                            href={`/admin?section=${item.key}`}
+                            className={active ? "admin-subnav-link active" : "admin-subnav-link"}
+                          >
+                            <SidebarIcon kind={item.icon} active={active} />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </nav>
 
@@ -855,7 +1095,7 @@ export default function AppShellClient({ children }) {
 
                     <span className="profile-copy">
                       <strong>{displayName}</strong>
-                      <small>{roleLabel(profile?.role)}</small>
+                      <small>{roleLabel(profile?.role, displayEmail)}</small>
                     </span>
 
                     <b>{profileOpen ? "Up" : "Down"}</b>
@@ -880,17 +1120,17 @@ export default function AppShellClient({ children }) {
                       <div className="profile-detail-grid">
                         <div>
                           <span>Role</span>
-                          <strong>{roleLabel(profile?.role)}</strong>
+                          <strong>{roleLabel(profile?.role, displayEmail)}</strong>
                         </div>
 
                         <div>
                           <span>Run Audit</span>
-                          <strong>{canRunAudits(profile) ? "Allowed" : "Locked"}</strong>
+                          <strong>{canRunAudits(profile, session) ? "Allowed" : "Locked"}</strong>
                         </div>
 
                         <div>
                           <span>Admin</span>
-                          <strong>{canAccessAdmin(profile) ? "Allowed" : "Locked"}</strong>
+                          <strong>{canAccessAdmin(profile, session) ? "Allowed" : "Locked"}</strong>
                         </div>
 
                         <div>
