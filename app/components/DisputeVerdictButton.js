@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 function normalizeText(value, fallback = "") {
@@ -58,6 +58,7 @@ export default function DisputeVerdictButton({
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -66,10 +67,17 @@ export default function DisputeVerdictButton({
   const payload = useMemo(() => buildResultPayload(result || {}), [result]);
   const canOpen = Boolean(payload.result_id || payload.conversation_id);
 
+  useEffect(() => {
+    setSubmitted(false);
+    setMessage("");
+    setError("");
+    setReason("");
+  }, [payload.result_id, payload.conversation_id]);
+
   function setOpen(nextOpen) {
     if (!isControlled) setInternalOpen(nextOpen);
     onOpenChange?.(nextOpen);
-    if (!nextOpen && !submitting) {
+    if (!nextOpen && !submitting && !submitted) {
       setMessage("");
       setError("");
     }
@@ -79,6 +87,8 @@ export default function DisputeVerdictButton({
     event.preventDefault();
     setError("");
     setMessage("");
+
+    if (submitted) return;
 
     if (!normalizeText(reason)) {
       setError("Please write the reason before submitting the dispute.");
@@ -106,16 +116,21 @@ export default function DisputeVerdictButton({
       const data = await response.json().catch(() => null);
 
       if (!response.ok || !data?.ok) {
+        const duplicatePending = response.status === 409 && String(data?.error || "").toLowerCase().includes("pending dispute");
+        if (duplicatePending) {
+          setSubmitted(true);
+          setReason("");
+          setMessage("Dispute request already submitted. A Master Admin can review it in Dispute Management.");
+          onSubmitted?.(data?.dispute || null);
+          return;
+        }
         throw new Error(data?.error || "Could not submit dispute.");
       }
 
-      setMessage("Dispute submitted successfully. A Master Admin can now review it in Dispute Management.");
+      setSubmitted(true);
       setReason("");
+      setMessage("Dispute request submitted. A Master Admin can now review it in Dispute Management.");
       onSubmitted?.(data.dispute);
-      setTimeout(() => {
-        setOpen(false);
-        setMessage("");
-      }, 1300);
     } catch (submitError) {
       setMessage("");
       setError(submitError instanceof Error ? submitError.message : "Could not submit dispute.");
@@ -154,9 +169,10 @@ export default function DisputeVerdictButton({
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Explain why the Review Status verdict is incorrect. Example: This should not be Missed Opportunity because the agent answered the exact policy question and there was no reasonable next action available."
+          placeholder={submitted ? "Dispute request submitted." : "Explain why the Review Status verdict is incorrect. Example: This should not be Missed Opportunity because the agent answered the exact policy question and there was no reasonable next action available."}
           rows={panelMode === "inline" ? 10 : 8}
-          required
+          disabled={submitted || submitting}
+          required={!submitted}
         />
       </label>
 
@@ -164,9 +180,9 @@ export default function DisputeVerdictButton({
       {error ? <div className="message error">{error}</div> : null}
 
       <div className="dispute-panel-actions">
-        <button type="button" className="secondary-btn" onClick={() => setOpen(false)} disabled={submitting}>Cancel</button>
-        <button type="submit" className="primary-btn" disabled={submitting || !normalizeText(reason)}>
-          {submitting ? "Submitting..." : "Submit Dispute"}
+        <button type="button" className="secondary-btn" onClick={() => setOpen(false)} disabled={submitting}>{submitted ? "Close" : "Cancel"}</button>
+        <button type="submit" className="primary-btn" disabled={submitted || submitting || !normalizeText(reason)}>
+          {submitted ? "Dispute Request Submitted" : submitting ? "Submitting..." : "Submit Dispute"}
         </button>
       </div>
     </form>
@@ -185,10 +201,10 @@ export default function DisputeVerdictButton({
             }
             setOpen(true);
           }}
-          disabled={!canOpen}
-          title={!canOpen ? "This row does not have enough saved result data to dispute." : "Dispute this Review Status verdict"}
+          disabled={!canOpen || submitted}
+          title={!canOpen ? "This row does not have enough saved result data to dispute." : submitted ? "A dispute request has already been submitted from this screen." : "Dispute this Review Status verdict"}
         >
-          Dispute Verdict
+          {submitted ? "Dispute Request Submitted" : "Dispute Verdict"}
         </button>
       ) : null}
 
@@ -216,8 +232,11 @@ export default function DisputeVerdictButton({
         }
         .mini-dispute-btn:disabled {
           cursor: not-allowed;
-          opacity: .52;
+          opacity: .76;
           transform: none;
+          background: linear-gradient(135deg, rgba(22, 163, 74, 0.48), rgba(14, 165, 233, 0.36));
+          border-color: rgba(74, 222, 128, 0.34);
+          color: #dcfce7;
         }
         .dispute-panel {
           border: 1px solid rgba(129, 140, 248, 0.34);
