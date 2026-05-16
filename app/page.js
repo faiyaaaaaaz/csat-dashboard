@@ -696,7 +696,7 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
         controller?.abort();
         setError("The full Intercom preview is taking too long to load. You can still review the stored AI verdict and open the conversation on Intercom.");
         setLoading(false);
-      }, 18000);
+      }, 58000);
 
       try {
         const { data: sessionData } = await supabase.auth.getSession();
