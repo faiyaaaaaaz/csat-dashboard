@@ -272,7 +272,6 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
   useEffect(() => {
     let cancelled = false;
     let controller = null;
-    let hardTimeoutId = null;
 
     async function loadPreview() {
       if (!conversationId) return;
@@ -281,12 +280,6 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
       setData(null);
 
       controller = new AbortController();
-      hardTimeoutId = setTimeout(() => {
-        if (cancelled) return;
-        controller?.abort();
-        setError("The full Intercom preview is taking too long to load. You can still review the stored AI verdict and open the conversation on Intercom.");
-        setLoading(false);
-      }, 58000);
 
       try {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -309,7 +302,6 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
           setError(previewError?.name === "AbortError" ? "The full Intercom preview is taking too long to load. You can still review the stored AI verdict and open the conversation on Intercom." : (previewError instanceof Error ? previewError.message : "Preview is not available for this conversation."));
         }
       } finally {
-        if (hardTimeoutId) clearTimeout(hardTimeoutId);
         if (!cancelled) setLoading(false);
       }
     }
@@ -318,7 +310,6 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
 
     return () => {
       cancelled = true;
-      if (hardTimeoutId) clearTimeout(hardTimeoutId);
       controller?.abort();
     };
   }, [conversationId, previewContext?.id, previewContext?.result_id]);
