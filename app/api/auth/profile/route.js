@@ -13,6 +13,73 @@ const ALLOWED_ROLES = [
   "viewer",
 ];
 
+const DEFAULT_ROLE_PERMISSIONS = {
+  master_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: true,
+    admin_overview: true,
+    admin_prompt: true,
+    admin_disputes: true,
+    admin_snippets: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_activity_logs: true,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  supervisor_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+  },
+  co_admin: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: true,
+    admin_overview: true,
+    admin_prompt: true,
+    admin_supervisor_teams: true,
+    admin_mappings: true,
+    admin_disputes: false,
+    admin_snippets: false,
+    admin_activity_logs: false,
+    admin_roles: false,
+    admin_api_vault: false,
+  },
+  audit_runner: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: true,
+    page_admin: false,
+  },
+  viewer: {
+    page_dashboard: true,
+    page_results: true,
+    page_run_audit: false,
+    page_admin: false,
+  },
+};
+
+const OWNER_PERMISSIONS = {
+  page_dashboard: true,
+  page_results: true,
+  page_run_audit: true,
+  page_admin: true,
+  admin_overview: true,
+  admin_prompt: true,
+  admin_api_vault: true,
+  admin_disputes: true,
+  admin_snippets: true,
+  admin_supervisor_teams: true,
+  admin_roles: true,
+  admin_mappings: true,
+  admin_activity_logs: true,
+};
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     status: init.status || 200,
@@ -56,16 +123,19 @@ function getSupabaseClients() {
   return { authClient, adminClient };
 }
 
-function safeProfile(row) {
+function safeProfile(row, permissions = null, email = "") {
   if (!row) return null;
+  const normalizedEmail = normalizeEmail(email || row.email);
 
   return {
     id: row.id,
     email: row.email,
     full_name: row.full_name,
     role: row.role,
-    can_run_tests: row.can_run_tests,
-    is_active: row.is_active,
+    access_tier: normalizedEmail === MASTER_ADMIN_EMAIL ? "platform_owner" : row.role,
+    can_run_tests: normalizedEmail === MASTER_ADMIN_EMAIL ? true : row.can_run_tests,
+    is_active: normalizedEmail === MASTER_ADMIN_EMAIL ? true : row.is_active,
+    permissions: permissions || {},
   };
 }
 
@@ -279,6 +349,33 @@ async function saveProfile(adminClient, user, email, grantPayload, existingProfi
 }
 
 
+async function readRolePermissionRows(adminClient) {
+  const { data, error } = await adminClient
+    .from("role_permission_matrix")
+    .select("role_key, permissions");
+
+  if (error) {
+    // Keep auth/profile resilient if the permissions table has not been installed yet.
+    return {};
+  }
+
+  return Object.fromEntries(
+    (Array.isArray(data) ? data : [])
+      .filter((row) => row?.role_key)
+      .map((row) => [row.role_key, row.permissions || {}])
+  );
+}
+
+function buildPermissionsForProfile(email, role, permissionRows) {
+  if (normalizeEmail(email) === MASTER_ADMIN_EMAIL) return OWNER_PERMISSIONS;
+
+  const normalizedRole = ALLOWED_ROLES.includes(role) ? role : "viewer";
+  return {
+    ...(DEFAULT_ROLE_PERMISSIONS[normalizedRole] || DEFAULT_ROLE_PERMISSIONS.viewer),
+    ...(permissionRows?.[normalizedRole] || {}),
+  };
+}
+
 function getRequestMeta(request) {
   const forwardedFor = request.headers.get("x-forwarded-for") || "";
   const ipAddress = forwardedFor.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
@@ -411,9 +508,10 @@ export async function GET(request) {
 
     if (!auth.ok) return auth.response;
 
-    const [grant, existingProfile] = await Promise.all([
+    const [grant, existingProfile, permissionRows] = await Promise.all([
       readRoleGrant(auth.adminClient, auth.email),
       readExistingProfile(auth.adminClient, auth.user.id, auth.email),
+      readRolePermissionRows(auth.adminClient),
     ]);
 
     const grantPayload = normalizeGrant(grant, auth.user, auth.email);
@@ -425,6 +523,8 @@ export async function GET(request) {
       existingProfile
     );
 
+    const permissions = buildPermissionsForProfile(auth.email, savedProfile.role, permissionRows);
+
     const sessionId = await touchActivitySession(
       auth.adminClient,
       request,
@@ -435,7 +535,7 @@ export async function GET(request) {
 
     return json({
       ok: true,
-      profile: safeProfile(savedProfile),
+      profile: safeProfile(savedProfile, permissions, auth.email),
       grant_applied: Boolean(grant && grant.is_active !== false),
       source: grant && grant.is_active !== false ? "role_grant" : "default_profile",
       activity_session_id: sessionId,
