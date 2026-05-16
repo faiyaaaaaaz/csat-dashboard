@@ -3688,23 +3688,22 @@ export default function RunPage() {
       </section>
 
       <section className="surface-card audit-command-panel">
-        <div className="audit-command-head">
+        <div className="audit-command-head compact-command-head">
           <div>
             <span className="mini-label">Audit Command Center</span>
-            <h2>Configure, Fetch, and Run</h2>
-            <p>Set the audit range and filters once, then run the workflow from one controlled command bar.</p>
+            <h2>Setup workflow rules, filters, and execution controls.</h2>
           </div>
           <div className="audit-command-status">
             <span className={`state-pill ${operationTone}`}>{operationLabel}</span>
-            <small>{autoRunAfterFetch ? "Auto-Run is enabled" : "Manual audit start"}</small>
+            <small>{autoRunAfterFetch ? "Auto-Run enabled" : "Manual run"}</small>
           </div>
         </div>
 
         <div className="audit-command-grid">
           <div className="audit-command-column audit-command-column-target">
             <div className="audit-column-heading">
-              <span className="mini-label">Core Target Parameters</span>
-              <strong>Choose the audit target before adding filters.</strong>
+              <span className="mini-label">Column 1: Core Target Configuration</span>
+              <strong>Width: ~25%</strong>
             </div>
 
             <div className="audit-command-control date-control-wide">
@@ -3735,8 +3734,8 @@ export default function RunPage() {
 
           <div className="audit-command-column audit-command-column-filters">
             <div className="audit-column-heading">
-              <span className="mini-label">Demographic & Performance Filters</span>
-              <strong>Refine the conversation pool with mapped team data.</strong>
+              <span className="mini-label">Column 2: Granular Filters</span>
+              <strong>Width: ~45%</strong>
             </div>
 
             <div className="audit-filter-matrix">
@@ -3792,8 +3791,8 @@ export default function RunPage() {
 
           <div className="audit-command-column audit-command-column-actions">
             <div className="audit-column-heading">
-              <span className="mini-label">Automation Settings & Final Actions</span>
-              <strong>Control queue size and execution behavior.</strong>
+              <span className="mini-label">Column 3: Rules & Action Matrix</span>
+              <strong>Width: ~30%</strong>
             </div>
 
             <div className="audit-toggle-stack">
@@ -4903,8 +4902,9 @@ const runStyles = `
   .audit-command-panel {
     position: relative;
     overflow: visible;
-    padding: clamp(18px, 2.1vw, 28px);
-    margin: 0 0 18px;
+    padding: 0;
+    margin: 0 0 14px;
+    border-radius: 16px;
     background: #0f1422;
   }
 
@@ -6673,45 +6673,54 @@ const runStyles = `
 
   .audit-command-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    margin-bottom: 20px;
+    gap: 14px;
+    margin: 0;
+    padding: 10px 12px 9px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+    background: linear-gradient(90deg, rgba(18, 24, 36, 0.98), rgba(31, 25, 54, 0.92));
   }
 
   .audit-command-head h2 {
-    font-size: clamp(28px, 2.6vw, 42px);
-    line-height: 1;
-    letter-spacing: -0.055em;
+    margin: 2px 0 0;
+    color: #d9e3ff;
+    font-size: 13px;
+    line-height: 1.25;
+    letter-spacing: normal;
+    font-weight: 800;
   }
 
   .audit-command-head p,
   .soft-copy {
-    margin: 8px 0 0;
-    color: #b8c4dd;
-    font-size: 16px;
-    line-height: 1.6;
+    margin: 4px 0 0;
+    color: #8f9bb8;
+    font-size: 12px;
+    line-height: 1.35;
     font-weight: 700;
   }
 
   .audit-command-status {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
+    justify-content: flex-end;
     gap: 8px;
+    white-space: nowrap;
   }
 
   .audit-command-status small {
     color: #a9b4d0;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 850;
   }
 
   .audit-command-grid {
     display: grid;
     grid-template-columns: 1fr 1.5fr 1fr;
-    gap: 16px;
+    gap: 8px;
     align-items: stretch;
+    padding: 8px;
+    background: #080d18;
   }
 
   .audit-command-column {
@@ -6719,47 +6728,59 @@ const runStyles = `
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 14px;
-    border-radius: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.075);
+    gap: 8px;
+    padding: 9px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.085);
     background: #111625;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
     overflow: visible;
   }
 
   .audit-command-column-filters {
-    background: #121824;
-  }
-
-  .audit-command-column-actions {
     background: #101522;
   }
 
+  .audit-command-column-actions {
+    background: #111522;
+  }
+
   .audit-column-heading {
-    display: grid;
-    gap: 6px;
-    min-height: 54px;
-    align-content: start;
+    min-height: auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 1px 4px;
+  }
+
+  .audit-column-heading .mini-label {
+    margin: 0;
+    color: #dbe6ff;
+    font-size: 12px;
+    letter-spacing: 0.065em;
+    text-transform: none;
   }
 
   .audit-column-heading strong {
-    color: #d9e3ff;
-    font-size: 13px;
-    line-height: 1.4;
-    font-weight: 800;
+    color: #8e9ab8;
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 750;
+    white-space: nowrap;
   }
 
   .audit-filter-matrix {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px;
     height: 100%;
   }
 
   .audit-toggle-stack {
     display: grid;
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .audit-command-control,
@@ -6767,10 +6788,10 @@ const runStyles = `
   .audit-command-actions {
     position: relative;
     min-width: 0;
-    padding: 12px;
-    border-radius: 18px;
+    padding: 8px;
+    border-radius: 9px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    background: transparent;
+    background: rgba(255, 255, 255, 0.022);
     box-shadow: none;
     overflow: visible;
   }
@@ -6781,11 +6802,12 @@ const runStyles = `
   }
 
   .audit-command-toggle {
+    min-height: 74px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: start;
-    background: rgba(255, 255, 255, 0.018);
+    gap: 8px;
+    align-items: center;
+    background: #161c2d;
   }
 
   .audit-command-toggle.auto {
@@ -6793,15 +6815,15 @@ const runStyles = `
   }
 
   .audit-command-toggle.auto.active {
-    border-color: rgba(74, 222, 128, 0.22);
-    background: rgba(22, 101, 52, 0.08);
+    border-color: rgba(74, 222, 128, 0.26);
+    background: rgba(20, 83, 45, 0.18);
   }
 
   .audit-command-toggle strong {
     display: block;
     color: #ffffff;
-    font-size: 17px;
-    line-height: 1.25;
+    font-size: 13px;
+    line-height: 1.15;
   }
 
   .compact-limit-field {
@@ -6809,374 +6831,107 @@ const runStyles = `
   }
 
   .compact-limit-field input {
-    min-height: 42px;
-    border-radius: 14px;
-    background: #0d1320;
+    min-height: 34px;
+    border-radius: 8px;
+    background: #0b101c;
     border-color: rgba(255, 255, 255, 0.08);
   }
 
   .audit-command-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: 8px;
     margin-top: auto;
     align-content: stretch;
-    background: rgba(255, 255, 255, 0.018);
+    background: #111625;
   }
 
   .audit-command-actions .primary-btn,
   .audit-command-actions .secondary-btn,
   .audit-command-actions .danger-btn {
     width: 100%;
-    min-height: 52px;
-    font-size: 15px;
-    border-radius: 16px;
+    min-height: 40px;
+    font-size: 13px;
+    border-radius: 8px;
   }
 
   .fetch-main-btn {
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    background: #1a2436;
+    border: 1px solid rgba(112, 132, 255, 0.24);
+    background: linear-gradient(180deg, #5557d8, #4847bf);
     color: #f8fbff;
-    box-shadow: 0 12px 26px rgba(2, 6, 23, 0.18);
+    box-shadow: none;
   }
 
   .fetch-main-btn:hover:not(:disabled) {
-    background: #24314a;
-    border-color: rgba(148, 163, 184, 0.32);
+    background: linear-gradient(180deg, #6265e8, #5352d4);
+    border-color: rgba(148, 163, 255, 0.36);
   }
 
   .run-main-btn {
-    color: #f8fbff;
-    border-color: rgba(148, 163, 184, 0.18);
-    background: transparent;
+    color: #ffffff;
+    border-color: rgba(236, 72, 153, 0.22);
+    background: linear-gradient(180deg, #c026a9, #a91f95);
     box-shadow: none;
   }
 
   .run-main-btn:hover:not(:disabled) {
-    background: rgba(148, 163, 184, 0.08);
-    border-color: rgba(148, 163, 184, 0.34);
+    background: linear-gradient(180deg, #d12dbc, #b725a5);
+    border-color: rgba(244, 114, 182, 0.34);
   }
 
-  .run-setup-strip {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 14px;
+
+  .audit-command-panel .mini-label,
+  .audit-command-panel label span {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+    margin-bottom: 5px;
   }
 
-  .run-setup-strip div,
-  .readiness-card {
-    min-width: 0;
-    padding: 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.075);
-    background: rgba(2, 6, 23, 0.32);
+  .audit-command-panel .run-multi-filter label {
+    gap: 5px;
   }
 
-  .run-setup-strip span,
-  .readiness-card span {
-    display: block;
-    color: #8ea0d6;
+  .audit-command-panel .run-multi-filter label > small {
+    display: none;
+  }
+
+  .audit-command-panel .run-multi-button,
+  .audit-command-panel .run-date-button {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: 7px;
+    background: #090e1a;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .audit-command-panel .run-multi-button strong,
+  .audit-command-panel .run-date-button strong {
     font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
   }
 
-  .run-setup-strip strong,
-  .readiness-card strong {
-    display: block;
-    color: #f8fbff;
-    font-size: 15px;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
+  .audit-command-panel .run-multi-button b,
+  .audit-command-panel .run-date-button b {
+    font-size: 10px;
   }
 
-  .readiness-card small {
-    display: block;
-    margin-top: 6px;
-    color: #a9b4d0;
-    font-size: 13px;
-    line-height: 1.45;
-    font-weight: 750;
+  .audit-command-panel .run-multi-pill-row {
+    gap: 5px;
   }
 
-  .readiness-card.success {
-    border-color: rgba(16, 185, 129, 0.22);
-    background: rgba(16, 185, 129, 0.07);
-  }
-
-  .readiness-card.notice {
-    border-color: rgba(59, 130, 246, 0.2);
-    background: rgba(59, 130, 246, 0.07);
-  }
-
-  .readiness-card.warning {
-    border-color: rgba(245, 158, 11, 0.2);
-    background: rgba(245, 158, 11, 0.07);
-  }
-
-  .readiness-card.danger {
-    border-color: rgba(244, 63, 94, 0.22);
-    background: rgba(244, 63, 94, 0.07);
-  }
-
-  .command-message-stack {
-    margin-top: 14px;
-  }
-
-  .readiness-card-shell {
-    background:
-      radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.1), transparent 32%),
-      linear-gradient(180deg, rgba(16, 24, 46, 0.82), rgba(8, 12, 26, 0.9));
-  }
-
-  .auth-shell-card.refined {
-    background: rgba(15, 23, 42, 0.5);
-  }
-
-  .run-readiness-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  .compact-readiness-stack {
-    gap: 10px;
-  }
-
-  .label-with-tip,
-  .inline-label {
-    display: inline-flex !important;
-    align-items: center;
-    gap: 7px;
-  }
-
-  .run-help-tip {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    border: 1px solid rgba(125, 211, 252, 0.4);
-    background: rgba(14, 165, 233, 0.14);
-    color: #bfdbfe;
-    font: inherit;
-    cursor: help;
-    z-index: 20;
-    flex: 0 0 auto;
-  }
-
-  .run-help-tip b {
-    display: block;
-    font-size: 12px;
-    line-height: 1;
-    font-weight: 950;
-  }
-
-  .run-help-tip i {
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    width: min(320px, 72vw);
-    transform: translateX(-50%) translateY(4px);
-    opacity: 0;
-    pointer-events: none;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(125, 211, 252, 0.24);
-    background: #06101f;
-    color: #dbeafe;
-    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
-    font-size: 13px;
-    line-height: 1.45;
+  .audit-command-panel .run-multi-pill-row i {
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #e5ecff;
+    font-size: 11px;
     font-style: normal;
-    font-weight: 800;
-    letter-spacing: normal;
-    text-transform: none;
-    z-index: 100000;
-    transition: opacity 0.16s ease, transform 0.16s ease;
   }
-
-  .run-help-tip:hover i,
-  .run-help-tip:focus i {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
-  .monitor-column > .surface-card {
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .run-summary-card .mini-grid.polished {
-    width: 100%;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .run-summary-card .mini-grid.polished div {
-    min-height: 78px;
-  }
-
-
-  .command-card,
-  .control-block,
-  .filter-control-block {
-    overflow: visible !important;
-  }
-
-  .filter-control-block {
-    position: relative;
-    z-index: 80;
-  }
-
-  .control-block:has(.run-multi-filter.open),
-  .filter-control-block:has(.run-multi-filter.open),
-  .control-block:has(.run-date-range-picker.open),
-  .filter-control-block:has(.run-date-range-picker.open) {
-    z-index: 8000;
-  }
-
-  .quick-run-panel {
-    margin: 0 0 14px;
-    padding: 14px 16px;
-    border-radius: 24px;
-    display: grid;
-    grid-template-columns: minmax(260px, 1fr) minmax(260px, 0.8fr) auto;
-    align-items: center;
-    gap: 14px;
-    background:
-      radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.08), transparent 32%),
-      linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(12, 16, 34, 0.98));
-  }
-
-  .quick-run-copy strong,
-  .quick-run-copy small {
-    display: block;
-  }
-
-  .quick-run-copy strong {
-    color: #ffffff;
-    font-size: 20px;
-    letter-spacing: -0.02em;
-    line-height: 1.3;
-  }
-
-  .quick-run-copy small {
-    margin-top: 5px;
-    color: #a9b4d0;
-    font-size: 14px;
-    font-weight: 750;
-    line-height: 1.45;
-  }
-
-  .quick-run-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .quick-run-metrics div {
-    min-height: 58px;
-    padding: 10px 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.035);
-  }
-
-  .quick-run-metrics span,
-  .quick-run-metrics strong {
-    display: block;
-  }
-
-  .quick-run-metrics span {
-    color: #8ea0d6;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-
-  .quick-run-metrics strong {
-    color: #ffffff;
-    font-size: 20px;
-    line-height: 1.1;
-  }
-
-  .quick-run-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  .quick-run-actions .primary-btn,
-  .quick-run-actions .secondary-btn,
-  .quick-run-actions .danger-btn {
-    min-height: 44px;
-  }
-
-  @media (max-width: 1540px) {
-    .audit-command-grid {
-      grid-template-columns: minmax(250px, 1fr) minmax(360px, 1.35fr) minmax(260px, 1fr);
-    }
-
-    .audit-command-actions {
-      grid-template-columns: 1fr;
-    }
-
-    .run-setup-strip {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 1280px) {
-    .hero-grid,
-    .command-grid,
-    .run-live-grid,
-    .run-intro-strip,
-    .quick-run-panel,
-    .audit-command-head,
-    .audit-command-grid,
-    .run-setup-strip,
-    .control-section-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .control-section-grid > .control-block,
-    .control-section-grid > .filter-control-block,
-    .control-section-grid > .action-block {
-      grid-column: auto;
-      grid-row: auto;
-    }
-
-    .hero-side-column,
-    .monitor-column {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 1180px) {
-    .audit-filter-matrix,
-    .audit-command-actions {
-      grid-template-columns: 1fr;
-    }
-
-    .run-readiness-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
 
   .conversation-id-control textarea {
     width: 100%;
-    min-height: 82px;
+    min-height: 76px;
     resize: vertical;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
@@ -7673,9 +7428,59 @@ const runStyles = `
   .conversation-preview-error strong { color: #fecaca; margin-bottom: 8px; }
   .conversation-preview-error span { color: #f8fbff; margin-bottom: 6px; }
 
+
+  .audit-command-panel .mini-label,
+  .audit-command-panel label span {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+    margin-bottom: 5px;
+  }
+
+  .audit-command-panel .run-multi-filter label {
+    gap: 5px;
+  }
+
+  .audit-command-panel .run-multi-filter label > small {
+    display: none;
+  }
+
+  .audit-command-panel .run-multi-button,
+  .audit-command-panel .run-date-button {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: 7px;
+    background: #090e1a;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .audit-command-panel .run-multi-button strong,
+  .audit-command-panel .run-date-button strong {
+    font-size: 12px;
+  }
+
+  .audit-command-panel .run-multi-button b,
+  .audit-command-panel .run-date-button b {
+    font-size: 10px;
+  }
+
+  .audit-command-panel .run-multi-pill-row {
+    gap: 5px;
+  }
+
+  .audit-command-panel .run-multi-pill-row i {
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #e5ecff;
+    font-size: 11px;
+    font-style: normal;
+  }
+
   .conversation-id-control textarea {
     width: 100%;
-    min-height: 82px;
+    min-height: 76px;
     resize: vertical;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
