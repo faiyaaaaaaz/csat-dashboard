@@ -329,19 +329,32 @@ function buildMetadata(conversation) {
 }
 
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = INTERCOM_PREVIEW_TIMEOUT_MS) {
+async function fetchIntercomConversationWithTimeout(url, options = {}, timeoutMs = INTERCOM_PREVIEW_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timeoutId = null;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Intercom preview request timed out. Please try again or open the conversation on Intercom."));
+    }, timeoutMs);
+  });
+
+  const requestPromise = (async () => {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const text = await response.text();
+    return { response, text };
+  })();
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await Promise.race([requestPromise, timeoutPromise]);
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error("Intercom preview request timed out. Please try again or open the conversation on Intercom.");
     }
     throw error;
   } finally {
-    clearTimeout(timeout);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -420,7 +433,7 @@ export async function POST(request) {
     }
 
     const intercomApiKey = await loadActiveApiKey(auth.adminClient);
-    const response = await fetchWithTimeout(`${INTERCOM_API_BASE}/conversations/${encodeURIComponent(conversationId)}`, {
+    const { response, text } = await fetchIntercomConversationWithTimeout(`${INTERCOM_API_BASE}/conversations/${encodeURIComponent(conversationId)}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -430,8 +443,6 @@ export async function POST(request) {
       },
       cache: "no-store",
     });
-
-    const text = await response.text();
     let conversation = null;
     try {
       conversation = text ? JSON.parse(text) : null;
