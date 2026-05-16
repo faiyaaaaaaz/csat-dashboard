@@ -677,6 +677,59 @@ async function loadLiveAuditPrompt(adminClient) {
   return livePrompt || FALLBACK_AUDIT_PROMPT;
 }
 
+async function loadActiveCalibrationSnippets(adminClient) {
+  const { data, error } = await adminClient
+    .from("ai_calibration_snippets")
+    .select("id, title, applies_to, wrong_verdict, correct_verdict, rule_text, applies_when, does_not_apply_when, example_context, updated_at")
+    .eq("is_active", true)
+    .eq("applies_to", "review_status")
+    .order("updated_at", { ascending: false })
+    .limit(25);
+
+  if (error) {
+    // Do not break audits if the snippet table has not been created yet.
+    if (error.code === "42P01") return [];
+    throw new Error(error.message || "Could not load calibration snippets.");
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
+function formatCalibrationSnippets(snippets) {
+  const rows = Array.isArray(snippets) ? snippets : [];
+  if (!rows.length) return "";
+
+  const body = rows
+    .map((snippet, index) => {
+      const title = String(snippet?.title || `Calibration Snippet ${index + 1}`).trim();
+      const wrong = String(snippet?.wrong_verdict || "").trim();
+      const correct = String(snippet?.correct_verdict || "").trim();
+      const rule = String(snippet?.rule_text || "").trim();
+      const appliesWhen = String(snippet?.applies_when || "").trim();
+      const doesNotApplyWhen = String(snippet?.does_not_apply_when || "").trim();
+      const example = String(snippet?.example_context || "").trim();
+
+      return [
+        `${index + 1}. ${title}`,
+        wrong ? `Wrong Review Status to avoid: ${wrong}` : "Wrong Review Status to avoid: Not specified",
+        correct ? `Correct Review Status guidance: ${correct}` : "Correct Review Status guidance: Not specified",
+        rule ? `Rule: ${rule}` : "Rule: Not specified",
+        appliesWhen ? `Applies when: ${appliesWhen}` : "",
+        doesNotApplyWhen ? `Does not apply when: ${doesNotApplyWhen}` : "",
+        example ? `Example pattern: ${example}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+
+  return `\n\n===== APPROVED REVIEW STATUS CALIBRATION SNIPPETS =====\nThese snippets are approved calibration rules from Master Admin-reviewed disputes. They do not replace the main audit prompt. They clarify Review Status classification and must be checked before finalizing reviewSentiment. Apply a snippet only when the conversation pattern truly matches it. Do not apply snippets to unrelated cases. Client Sentiment and Resolution Status must still follow the main prompt.\n\n${body}\n===== END APPROVED REVIEW STATUS CALIBRATION SNIPPETS =====`;
+}
+
+function buildAuditPromptWithCalibration(livePrompt, snippets) {
+  return `${livePrompt}${formatCalibrationSnippets(snippets)}`;
+}
+
 async function runOpenAIAudit({
   openAiApiKey,
   transcript,
@@ -1405,7 +1458,9 @@ export async function POST(request) {
       });
     }
 
-    const auditPrompt = await loadLiveAuditPrompt(adminClient);
+    const liveAuditPrompt = await loadLiveAuditPrompt(adminClient);
+    const activeCalibrationSnippets = await loadActiveCalibrationSnippets(adminClient);
+    const auditPrompt = buildAuditPromptWithCalibration(liveAuditPrompt, activeCalibrationSnippets);
 
     const results = await auditConversations({
       conversationsToAudit,
@@ -1429,10 +1484,13 @@ export async function POST(request) {
 
     const unmappedCount = mappedResults.length - mappedCount;
 
-    const promptSource =
-      auditPrompt === FALLBACK_AUDIT_PROMPT
+    const promptSourceBase =
+      liveAuditPrompt === FALLBACK_AUDIT_PROMPT
         ? "fallback_code_prompt"
         : "admin_live_prompt";
+    const promptSource = activeCalibrationSnippets.length
+      ? `${promptSourceBase}+calibration_snippets:${activeCalibrationSnippets.length}`
+      : promptSourceBase;
 
     const successCount = mappedResults.filter((item) => !item.error).length;
     const errorCount = mappedResults.filter((item) => Boolean(item.error)).length;
