@@ -7685,6 +7685,24 @@ const runStyles = `
     margin-bottom: 0 !important;
   }
 
+  .audit-command-panel,
+  .audit-command-grid,
+  .audit-command-column {
+    overflow: visible !important;
+  }
+
+  .audit-command-column:has(.run-help-tip:hover),
+  .audit-command-column:has(.run-help-tip:focus),
+  .audit-command-column:has(.run-help-tip:focus-within),
+  .audit-command-control:has(.run-help-tip:hover),
+  .audit-command-control:has(.run-help-tip:focus),
+  .audit-command-control:has(.run-help-tip:focus-within),
+  .audit-command-toggle:has(.run-help-tip:hover),
+  .audit-command-toggle:has(.run-help-tip:focus),
+  .audit-command-toggle:has(.run-help-tip:focus-within) {
+    z-index: 12000 !important;
+  }
+
   .run-help-tip {
     position: relative !important;
     display: inline-flex !important;
@@ -7734,6 +7752,11 @@ const runStyles = `
     white-space: normal !important;
     z-index: 100000 !important;
     transition: opacity 0.16s ease, transform 0.16s ease !important;
+  }
+
+  .run-help-tip:hover,
+  .run-help-tip:focus {
+    z-index: 12001 !important;
   }
 
   .run-help-tip:hover i,
