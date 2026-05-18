@@ -1,10 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  PLATFORM_OWNER_EMAIL,
+  buildPermissionsForRole,
+  filterResultsForActor,
+  hasPermission,
+  loadSupervisorTeamsForActor,
+  normalizeEmail as normalizePermissionEmail,
+  readRolePermissionRows,
+} from "../../../lib/permissionRules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MASTER_ADMIN_EMAIL = "faiyaz@nextventures.io";
+const MASTER_ADMIN_EMAIL = PLATFORM_OWNER_EMAIL;
 const PAGE_SIZE = 1000;
 const MAX_RESULT_ROWS = 50000;
 const MAX_RUN_ROWS = 10000;
@@ -72,16 +81,8 @@ function canReadResults(profile) {
   return profile?.is_active === true;
 }
 
-function canManageResults(profile, email) {
-  const role = normalizeKey(profile?.role);
-
-  return Boolean(
-    profile?.is_active === true &&
-      (email === MASTER_ADMIN_EMAIL ||
-        role === "master_admin" ||
-        role === "admin" ||
-        role === "co_admin")
-  );
+function canManageResults(profile, email, permissions = {}) {
+  return Boolean(email === MASTER_ADMIN_EMAIL || permissions.results_delete === true);
 }
 
 function isSupervisorScoped(profile, email) {
@@ -240,7 +241,10 @@ async function authenticate(request) {
     };
   }
 
-  return { ok: true, user, email, profile, adminClient };
+  const permissionRows = await readRolePermissionRows(adminClient);
+  const permissions = buildPermissionsForRole(email, profile?.role, permissionRows);
+
+  return { ok: true, user, email, profile, permissions, adminClient };
 }
 
 async function writeActivityLog(adminClient, request, auth, payload) {
@@ -450,16 +454,27 @@ export async function GET(request) {
     const auth = await authenticate(request);
     if (!auth.ok) return auth.response;
 
-    const { adminClient, email, profile } = auth;
+    const { adminClient, email, profile, permissions } = auth;
 
-    const [supervisorTeams, totalResultsCount, rawResults] = await Promise.all([
+    if (!hasPermission(auth, "page_results")) {
+      return json({ ok: false, error: "This account does not have permission to view Results." }, { status: 403 });
+    }
+
+    const [allSupervisorTeams, supervisorTeamsForActor, totalResultsCount, rawResults] = await Promise.all([
       loadSupervisorTeams(adminClient),
+      loadSupervisorTeamsForActor(adminClient, auth),
       countTableRows(adminClient, "audit_results"),
       fetchAllAuditResults(adminClient),
     ]);
 
-    const results = sortResultsForArchive(rawResults);
+    const scoped = filterResultsForActor(rawResults, auth, supervisorTeamsForActor);
+    if (scoped.visibility === "no_results_permission") {
+      return json({ ok: false, error: "This account does not have permission to view stored results." }, { status: 403 });
+    }
+
+    const results = sortResultsForArchive(scoped.rows);
     const runs = await fetchRunsForResults(adminClient, results);
+    const visibleSupervisorTeams = hasPermission(auth, "results_view_all") ? allSupervisorTeams : supervisorTeamsForActor;
 
     const uniqueConversationCount = uniqueValues(
       results.map((row) => row?.conversation_id)
@@ -469,12 +484,13 @@ export async function GET(request) {
       ok: true,
       runs,
       results,
-      supervisorTeams,
+      supervisorTeams: visibleSupervisorTeams,
       meta: {
         requestedBy: email,
         role: profile?.role || "viewer",
-        scopedToSupervisorTeams: false,
-        supervisorTeamCount: supervisorTeams.length,
+        permissions,
+        scopedToSupervisorTeams: scoped.visibility === "team_results",
+        supervisorTeamCount: visibleSupervisorTeams.length,
         runsCount: runs.length,
         resultsCount: results.length,
         uniqueConversationCount,
@@ -484,8 +500,8 @@ export async function GET(request) {
           typeof totalResultsCount === "number"
             ? rawResults.length < totalResultsCount
             : rawResults.length >= MAX_RESULT_ROWS,
-        visibility: "all_results",
-        source: "server_api_results_route_all_results_paginated",
+        visibility: scoped.visibility,
+        source: "server_api_results_route_permission_scoped_paginated",
       },
     });
   } catch (error) {
@@ -509,7 +525,7 @@ export async function DELETE(request) {
 
     const { adminClient, email, profile } = auth;
 
-    if (!canManageResults(profile, email)) {
+    if (!canManageResults(profile, email, auth.permissions)) {
       await writeActivityLog(adminClient, request, auth, {
         action_type: "results_delete_failed",
         action_label: "Results Delete Failed",
