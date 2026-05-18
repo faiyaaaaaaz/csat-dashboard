@@ -2261,6 +2261,7 @@ function DetailModal({
   title,
   value,
   rows,
+  profile,
   supervisorTeams,
   supervisorLookup,
   employees,
@@ -3024,6 +3025,7 @@ export default function DashboardPage() {
         value={detailState.value}
         rows={detailState.rows}
         initialFilters={detailState.initialFilters}
+        profile={profile}
         supervisorTeams={supervisorTeams}
         supervisorLookup={supervisorLookup}
         employees={employees}
