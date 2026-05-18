@@ -1,74 +1,53 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  PLATFORM_OWNER_EMAIL,
+  buildPermissionsForRole,
+  canActorDisputeResult,
+  hasPermission,
+  normalizeEmail,
+  normalizeKey,
+  normalizeText,
+  readRolePermissionRows,
+} from "../../../lib/permissionRules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MASTER_ADMIN_EMAIL = "faiyaz@nextventures.io";
-
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     status: init.status || 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store, no-cache, must-revalidate",
-      ...(init.headers || {}),
-    },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store, no-cache, must-revalidate", ...(init.headers || {}) },
   });
 }
 
-function getEnv(name) {
-  const value = process.env[name];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeText(value) {
-  return String(value || "").trim();
-}
-
-function normalizeEmail(value) {
-  return normalizeText(value).toLowerCase();
-}
-
-function normalizeKey(value) {
-  return normalizeText(value).toLowerCase();
-}
+function getEnv(name) { const value = process.env[name]; return typeof value === "string" ? value.trim() : ""; }
 
 function createClients() {
   const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
   const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   const supabaseServiceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
-
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-    throw new Error("Missing required Supabase environment variables.");
-  }
-
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) throw new Error("Missing required Supabase environment variables.");
   return {
     authClient: createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } }),
     adminClient: createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } }),
   };
 }
 
-function fallbackProfile(user) {
-  const email = normalizeEmail(user?.email);
-  if (email === MASTER_ADMIN_EMAIL) {
-    return { id: user.id, email, full_name: user.user_metadata?.full_name || "Faiyaz Muhtasim Ahmed", role: "master_admin", can_run_tests: true, is_active: true };
+function fallbackProfile(user, email) {
+  if (email === PLATFORM_OWNER_EMAIL) {
+    return { id: user.id, email, full_name: "Faiyaz Muhtasim Ahmed", role: "master_admin", can_run_tests: true, is_active: true };
   }
-  if (email.endsWith("@nextventures.io")) {
-    return { id: user.id, email, full_name: user.user_metadata?.full_name || user.user_metadata?.name || email, role: "viewer", can_run_tests: false, is_active: true };
-  }
-  return null;
+  return { id: user.id, email, full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || email, role: "viewer", can_run_tests: false, is_active: true };
 }
 
 async function authenticate(request) {
   const authHeader = request.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
-
   if (!token) return { ok: false, response: json({ ok: false, error: "Missing access token." }, { status: 401 }) };
 
   const { authClient, adminClient } = createClients();
   const { data: { user }, error: userError } = await authClient.auth.getUser(token);
-
   if (userError || !user) return { ok: false, response: json({ ok: false, error: "Invalid or expired session." }, { status: 401 }) };
 
   const email = normalizeEmail(user.email);
@@ -79,7 +58,6 @@ async function authenticate(request) {
     .select("id, email, full_name, role, can_run_tests, is_active")
     .eq("id", user.id)
     .maybeSingle();
-
   if (idError) throw new Error(idError.message || "Could not load profile.");
 
   let profile = profileById || null;
@@ -94,59 +72,54 @@ async function authenticate(request) {
     profile = profileByEmail || null;
   }
 
-  profile = profile || fallbackProfile(user);
-  if (email === MASTER_ADMIN_EMAIL) profile = { ...(profile || {}), id: user.id, email, full_name: profile?.full_name || "Faiyaz Muhtasim Ahmed", role: "master_admin", can_run_tests: true, is_active: true };
-
+  profile = profile || fallbackProfile(user, email);
+  if (email === PLATFORM_OWNER_EMAIL) profile = fallbackProfile(user, email);
   if (!profile?.is_active) return { ok: false, response: json({ ok: false, error: "This account is not active." }, { status: 403 }) };
 
-  return { ok: true, user, email, profile, adminClient };
+  const permissionRows = await readRolePermissionRows(adminClient);
+  const permissions = buildPermissionsForRole(email, profile.role, permissionRows);
+
+  return { ok: true, user, email, profile, permissions, adminClient };
 }
 
-function isMasterAdmin(profile, email) {
-  const role = normalizeKey(profile?.role);
-  return email === MASTER_ADMIN_EMAIL || role === "master_admin";
-}
+async function loadResultForDispute(adminClient, { resultId = "", conversationId = "", body = {} } = {}) {
+  let result = null;
 
-async function canDisputeResult(adminClient, auth, result) {
-  const role = normalizeKey(auth.profile?.role);
-  const actorEmail = normalizeEmail(auth.email);
-  const actorName = normalizeKey(auth.profile?.full_name);
-  const resultEmployeeEmail = normalizeEmail(result?.employee_email);
-
-  if (isMasterAdmin(auth.profile, actorEmail)) return { allowed: true, reason: "master_admin" };
-
-  if (role === "supervisor_admin") {
-    const { data: teams, error: teamsError } = await adminClient
-      .from("supervisor_teams")
-      .select("id, supervisor_name, supervisor_email, is_active")
-      .eq("is_active", true)
-      .limit(1000);
-
-    if (teamsError) throw new Error(teamsError.message || "Could not check Supervisor Team access.");
-
-    const matchingTeamIds = (Array.isArray(teams) ? teams : [])
-      .filter((team) => normalizeEmail(team?.supervisor_email) === actorEmail || normalizeKey(team?.supervisor_name) === actorName)
-      .map((team) => team.id)
-      .filter(Boolean);
-
-    if (matchingTeamIds.length && resultEmployeeEmail) {
-      const { data: member, error: memberError } = await adminClient
-        .from("supervisor_team_members")
-        .select("id")
-        .in("supervisor_team_id", matchingTeamIds)
-        .ilike("employee_email", resultEmployeeEmail)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-
-      if (memberError) throw new Error(memberError.message || "Could not check team member access.");
-      if (member?.id) return { allowed: true, reason: "supervisor_team_member" };
-    }
+  if (resultId) {
+    const { data, error } = await adminClient
+      .from("audit_results")
+      .select("id, conversation_id, agent_name, employee_name, employee_email, team_name, review_sentiment, client_sentiment, resolution_status, replied_at, created_at")
+      .eq("id", resultId)
+      .maybeSingle();
+    if (error) throw new Error(error.message || "Could not load result.");
+    result = data || null;
   }
 
-  if (resultEmployeeEmail && actorEmail === resultEmployeeEmail) return { allowed: true, reason: "own_result" };
+  if (!result && conversationId) {
+    const { data, error } = await adminClient
+      .from("audit_results")
+      .select("id, conversation_id, agent_name, employee_name, employee_email, team_name, review_sentiment, client_sentiment, resolution_status, replied_at, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message || "Could not load result by conversation ID.");
+    result = data || null;
+  }
 
-  return { allowed: false, reason: "not_owner_or_team" };
+  return result || {
+    id: resultId || null,
+    conversation_id: conversationId,
+    agent_name: normalizeText(body.agent_name),
+    employee_name: normalizeText(body.employee_name),
+    employee_email: normalizeEmail(body.employee_email),
+    team_name: normalizeText(body.team_name),
+    review_sentiment: normalizeText(body.current_review_status),
+    client_sentiment: normalizeText(body.client_sentiment),
+    resolution_status: normalizeText(body.resolution_status),
+    replied_at: body.replied_at || null,
+    created_at: body.created_at || null,
+  };
 }
 
 async function writeActivityLog(adminClient, request, auth, payload) {
@@ -170,9 +143,7 @@ async function writeActivityLog(adminClient, request, auth, payload) {
       user_agent: request.headers.get("user-agent") || null,
       request_path: new URL(request.url).pathname,
     });
-  } catch (error) {
-    console.warn("[disputes] activity log failed", error);
-  }
+  } catch (error) { console.warn("[disputes] activity log failed", error); }
 }
 
 export async function GET(request) {
@@ -180,13 +151,23 @@ export async function GET(request) {
     const auth = await authenticate(request);
     if (!auth.ok) return auth.response;
 
-    if (!isMasterAdmin(auth.profile, auth.email)) {
-      return json({ ok: false, error: "Only Master Admins can view Dispute Management." }, { status: 403 });
+    const { searchParams } = new URL(request.url);
+    const mode = normalizeKey(searchParams.get("mode"));
+
+    if (mode === "eligibility") {
+      const resultId = normalizeText(searchParams.get("result_id"));
+      const conversationId = normalizeText(searchParams.get("conversation_id"));
+      if (!resultId && !conversationId) return json({ ok: false, error: "Missing result ID or conversation ID." }, { status: 400 });
+      const result = await loadResultForDispute(auth.adminClient, { resultId, conversationId });
+      const permission = await canActorDisputeResult(auth.adminClient, auth, result);
+      return json({ ok: true, allowed: permission.allowed, reason: permission.reason });
     }
 
-    const { searchParams } = new URL(request.url);
-    const status = normalizeKey(searchParams.get("status") || "all");
+    if (!hasPermission(auth, "admin_disputes") && !hasPermission(auth, "disputes_review")) {
+      return json({ ok: false, error: "You do not have permission to view Dispute Management." }, { status: 403 });
+    }
 
+    const status = normalizeKey(searchParams.get("status") || "all");
     let query = auth.adminClient
       .from("verdict_disputes")
       .select("*")
@@ -217,47 +198,11 @@ export async function POST(request) {
     if (!resultId && !conversationId) return json({ ok: false, error: "This result does not have a saved result ID or conversation ID." }, { status: 400 });
     if (!reason) return json({ ok: false, error: "Reason for dispute is required." }, { status: 400 });
 
-    let result = null;
+    const resultForPermission = await loadResultForDispute(auth.adminClient, { resultId, conversationId, body });
+    const permission = await canActorDisputeResult(auth.adminClient, auth, resultForPermission);
 
-    if (resultId) {
-      const { data, error } = await auth.adminClient
-        .from("audit_results")
-        .select("id, conversation_id, agent_name, employee_name, employee_email, team_name, review_sentiment, client_sentiment, resolution_status, replied_at, created_at")
-        .eq("id", resultId)
-        .maybeSingle();
-      if (error) throw new Error(error.message || "Could not load result.");
-      result = data || null;
-    }
-
-    if (!result && conversationId) {
-      const { data, error } = await auth.adminClient
-        .from("audit_results")
-        .select("id, conversation_id, agent_name, employee_name, employee_email, team_name, review_sentiment, client_sentiment, resolution_status, replied_at, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw new Error(error.message || "Could not load result by conversation ID.");
-      result = data || null;
-    }
-
-    const resultForPermission = result || {
-      id: resultId || null,
-      conversation_id: conversationId,
-      agent_name: normalizeText(body.agent_name),
-      employee_name: normalizeText(body.employee_name),
-      employee_email: normalizeEmail(body.employee_email),
-      team_name: normalizeText(body.team_name),
-      review_sentiment: normalizeText(body.current_review_status),
-      client_sentiment: normalizeText(body.client_sentiment),
-      resolution_status: normalizeText(body.resolution_status),
-      replied_at: body.replied_at || null,
-      created_at: body.created_at || null,
-    };
-
-    const permission = await canDisputeResult(auth.adminClient, auth, resultForPermission);
     if (!permission.allowed) {
-      return json({ ok: false, error: "You can only dispute your own results. If this belongs to your team, please ask your Supervisor Admin or Master Admin to review it." }, { status: 403 });
+      return json({ ok: false, error: "You do not have permission to dispute this result." }, { status: 403 });
     }
 
     const { data: existing, error: existingError } = await auth.adminClient
@@ -303,7 +248,7 @@ export async function POST(request) {
       target_id: dispute.id,
       target_label: dispute.conversation_id || dispute.result_id,
       description: `${auth.email} submitted a Review Status dispute for ${dispute.conversation_id || dispute.result_id}.`,
-      metadata: { result_id: dispute.result_id, conversation_id: dispute.conversation_id, current_review_status: dispute.current_review_status },
+      metadata: { result_id: dispute.result_id, conversation_id: dispute.conversation_id, current_review_status: dispute.current_review_status, permission_source: permission.reason },
     });
 
     return json({ ok: true, dispute });
