@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabase";
-import DisputeVerdictButton from "./components/DisputeVerdictButton";
+import DisputeVerdictButton, { canUserDisputeResult } from "./components/DisputeVerdictButton";
 
 const INTERCOM_BASE_URL =
   "https://app.intercom.com/a/inbox/aphmhtyj/inbox/conversation";
@@ -667,7 +667,7 @@ function compactPreviewEventText(message) {
   return previewText(message?.body, message?.messageType, "Conversation event.");
 }
 
-function ConversationPreviewModal({ conversationId, previewContext = null, onClose }) {
+function ConversationPreviewModal({ conversationId, previewContext = null, profile = null, supervisorTeams = [], onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
@@ -773,6 +773,7 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
     { title: "Intercom Attributes", subtitle: "Additional populated fields", rows: mergedMetadata.customAttributes || [] },
   ].filter((section) => section.rows.length);
   const tags = mergedMetadata.tags || [];
+  const canDisputePreview = canUserDisputeResult(profile, supervisorTeams, disputeResultContext);
 
   return createPortal(
     <div className="conversation-preview-backdrop" onClick={onClose}>
@@ -786,15 +787,17 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
             </span>
           </div>
           <div className="conversation-preview-actions">
-            <button
-              type="button"
-              className={`secondary-btn dispute-action ${disputeOpen ? "active" : ""} ${disputeSubmitted ? "submitted" : ""}`}
-              onClick={() => { if (!disputeSubmitted) setDisputeOpen((current) => !current); }}
-              disabled={disputeSubmitted}
-              title={disputeSubmitted ? "Dispute request submitted." : "Dispute this Review Status verdict."}
-            >
-              {disputeSubmitted ? "Dispute Request Submitted" : disputeOpen ? "Close Dispute" : "Dispute Verdict"}
-            </button>
+            {canDisputePreview || disputeSubmitted ? (
+              <button
+                type="button"
+                className={`secondary-btn dispute-action ${disputeOpen ? "active" : ""} ${disputeSubmitted ? "submitted" : ""}`}
+                onClick={() => { if (!disputeSubmitted) setDisputeOpen((current) => !current); }}
+                disabled={disputeSubmitted || !canDisputePreview}
+                title={disputeSubmitted ? "Dispute request submitted." : "Dispute this Review Status verdict."}
+              >
+                {disputeSubmitted ? "Dispute Request Submitted" : disputeOpen ? "Close Dispute" : "Dispute Verdict"}
+              </button>
+            ) : null}
             <a href={conversationUrl(conversationId)} target="_blank" rel="noreferrer" className="secondary-btn">Open on Intercom</a>
             <button type="button" className="secondary-btn light-action" onClick={onClose}>Close</button>
           </div>
@@ -882,6 +885,8 @@ function ConversationPreviewModal({ conversationId, previewContext = null, onClo
                 <aside className="conversation-preview-dispute-panel">
                   <DisputeVerdictButton
                     result={disputeResultContext}
+                    profile={profile}
+                    supervisorTeams={supervisorTeams}
                     panelMode="inline"
                     hideButton
                     open={disputeOpen}
@@ -2421,7 +2426,7 @@ function DetailModal({
                           onToggleVerdict={() => toggleVerdict(verdictKey)}
                           verdictVisible={isVerdictVisible}
                         />
-                        <DisputeVerdictButton result={row} onOpenRequest={() => openDisputePanel(row)} />
+                        <DisputeVerdictButton result={row} profile={profile} supervisorTeams={supervisorTeams} onOpenRequest={() => openDisputePanel(row)} />
                       </td>
                     </tr>
                     {isVerdictVisible ? (
@@ -2454,6 +2459,8 @@ function DetailModal({
             <aside className="drill-dispute-panel">
               <DisputeVerdictButton
                 result={activeDisputeRow}
+                profile={profile}
+                supervisorTeams={supervisorTeams}
                 panelMode="inline"
                 hideButton
                 open={Boolean(activeDisputeRow)}
@@ -2464,7 +2471,7 @@ function DetailModal({
         </div>
 
         {previewConversationId ? (
-          <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} onClose={closeConversationPreview} />
+          <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} profile={profile} supervisorTeams={supervisorTeams} onClose={closeConversationPreview} />
         ) : null}
       </div>
     </div>
@@ -2698,6 +2705,7 @@ export default function DashboardPage() {
   const [supervisorTeams, setSupervisorTeams] = useState([]);
   const [error, setError] = useState("");
   const [welcomeIdentity, setWelcomeIdentity] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [welcomeAlreadyShown, setWelcomeAlreadyShown] = useState(true);
   const [globalFilters, setGlobalFilters] = useState(createBaseFilters("past_30_days", true));
   const [leaderboardFilters, setLeaderboardFilters] = useState(createBaseFilters("past_30_days", true));
@@ -2729,6 +2737,7 @@ export default function DashboardPage() {
         setRawRows([]);
         setSupervisorTeams([]);
         setWelcomeIdentity(null);
+        setProfile(null);
         setWelcomeAlreadyShown(true);
         setError("Please sign in with your NEXT Ventures account to load dashboard data.");
         setLoading(false);
@@ -2764,6 +2773,8 @@ export default function DashboardPage() {
           fetchWelcomeProfile(activeSession),
         ]);
 
+        setProfile(welcomeProfile || null);
+
         if (welcomeProfile) {
           const enrichedWelcomeIdentity = buildWelcomeIdentity(activeSession, welcomeProfile);
 
@@ -2796,6 +2807,7 @@ export default function DashboardPage() {
 
         setRawRows([]);
         setSupervisorTeams([]);
+        setProfile(null);
         setError(loadError instanceof Error ? loadError.message : "Could not load dashboard data.");
       } finally {
         if (active && currentRequestId === requestId) setLoading(false);
@@ -3531,7 +3543,7 @@ export default function DashboardPage() {
                                 onToggleVerdict={() => toggleVerdict(verdictKey)}
                                 verdictVisible={isVerdictVisible}
                               />
-                              <DisputeVerdictButton result={row} />
+                              <DisputeVerdictButton result={row} profile={profile} supervisorTeams={supervisorTeams} />
                             </td>
                           </tr>
                           {isVerdictVisible ? (
@@ -3559,7 +3571,7 @@ export default function DashboardPage() {
       </div>
 
       {previewConversationId ? (
-        <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} onClose={closeConversationPreview} />
+        <ConversationPreviewModal conversationId={previewConversationId} previewContext={previewContext} profile={profile} supervisorTeams={supervisorTeams} onClose={closeConversationPreview} />
       ) : null}
 
       {showJumpTop ? (
