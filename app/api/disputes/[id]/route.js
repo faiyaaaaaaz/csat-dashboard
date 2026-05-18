@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  PLATFORM_OWNER_EMAIL,
+  buildPermissionsForRole,
+  hasPermission,
+  readRolePermissionRows,
+} from "../../../../lib/permissionRules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MASTER_ADMIN_EMAIL = "faiyaz@nextventures.io";
+const MASTER_ADMIN_EMAIL = PLATFORM_OWNER_EMAIL;
 const REVIEW_STATUS_OPTIONS = new Set([
   "Likely Negative Review",
   "Likely Positive Review",
@@ -57,9 +63,10 @@ async function authenticate(request) {
   }
   if (email === MASTER_ADMIN_EMAIL) profile = { ...(profile || {}), id: user.id, email, full_name: profile?.full_name || "Faiyaz Muhtasim Ahmed", role: "master_admin", can_run_tests: true, is_active: true };
   if (!profile?.is_active) return { ok: false, response: json({ ok: false, error: "This account is not active." }, { status: 403 }) };
-  const role = normalizeKey(profile?.role);
-  if (!(email === MASTER_ADMIN_EMAIL || role === "master_admin")) return { ok: false, response: json({ ok: false, error: "Only Master Admins can manage disputes." }, { status: 403 }) };
-  return { ok: true, user, email, profile, adminClient };
+  const permissionRows = await readRolePermissionRows(adminClient);
+  const permissions = buildPermissionsForRole(email, profile?.role, permissionRows);
+  if (!hasPermission({ email, profile, permissions }, "disputes_review")) return { ok: false, response: json({ ok: false, error: "You do not have permission to approve or reject disputes." }, { status: 403 }) };
+  return { ok: true, user, email, profile, permissions, adminClient };
 }
 
 async function writeActivityLog(adminClient, request, auth, payload) {
