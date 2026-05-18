@@ -3,9 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+const PLATFORM_OWNER_EMAIL = "faiyaz@nextventures.io";
+
 function normalizeText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function normalizeKey(value) {
+  return normalizeText(value).toLowerCase();
 }
 
 function normalizeEmail(value) {
@@ -45,8 +51,84 @@ function buildResultPayload(result) {
   };
 }
 
+function permissionsFor(profile) {
+  return profile?.permissions && typeof profile.permissions === "object" ? profile.permissions : {};
+}
+
+function isActiveProfile(profile) {
+  return Boolean(profile && profile.is_active !== false);
+}
+
+function isPlatformOwner(profile) {
+  return normalizeEmail(profile?.email) === PLATFORM_OWNER_EMAIL || profile?.access_tier === "platform_owner";
+}
+
+function resultMatchesOwnProfile(profile, result) {
+  const actorEmail = normalizeEmail(profile?.email);
+  const actorName = normalizeKey(profile?.full_name);
+  const payload = buildResultPayload(result || {});
+  const employeeEmail = normalizeEmail(payload.employee_email);
+  const employeeName = normalizeKey(payload.employee_name);
+  const agentName = normalizeKey(payload.agent_name);
+
+  return Boolean(
+    (actorEmail && employeeEmail && actorEmail === employeeEmail) ||
+      (actorName && employeeName && actorName === employeeName) ||
+      (actorName && agentName && actorName === agentName)
+  );
+}
+
+function resultMatchesSupervisorTeam(profile, supervisorTeams, result) {
+  const actorEmail = normalizeEmail(profile?.email);
+  const actorName = normalizeKey(profile?.full_name);
+  const payload = buildResultPayload(result || {});
+  const employeeEmail = normalizeEmail(payload.employee_email);
+  const employeeName = normalizeKey(payload.employee_name);
+  const agentName = normalizeKey(payload.agent_name);
+
+  if (!Array.isArray(supervisorTeams) || !supervisorTeams.length) return false;
+
+  return supervisorTeams.some((team) => {
+    const teamSupervisorEmail = normalizeEmail(team?.supervisor_email);
+    const teamSupervisorName = normalizeKey(team?.supervisor_name);
+    const isSupervisorForTeam = Boolean(
+      (actorEmail && teamSupervisorEmail && actorEmail === teamSupervisorEmail) ||
+        (actorName && teamSupervisorName && actorName === teamSupervisorName)
+    );
+
+    if (!isSupervisorForTeam) return false;
+
+    return (team?.members || []).some((member) => {
+      const memberEmail = normalizeEmail(member?.employee_email);
+      const memberName = normalizeKey(member?.employee_name);
+      const memberIntercom = normalizeKey(member?.intercom_agent_name);
+
+      return Boolean(
+        (employeeEmail && memberEmail && employeeEmail === memberEmail) ||
+          (employeeName && memberName && employeeName === memberName) ||
+          (agentName && memberIntercom && agentName === memberIntercom)
+      );
+    });
+  });
+}
+
+export function canUserDisputeResult(profile, supervisorTeams, result) {
+  if (!isActiveProfile(profile)) return false;
+
+  const permissions = permissionsFor(profile);
+
+  if (isPlatformOwner(profile)) return true;
+  if (permissions.disputes_submit_any === true) return true;
+  if (permissions.disputes_submit_team === true && resultMatchesSupervisorTeam(profile, supervisorTeams, result)) return true;
+  if (permissions.disputes_submit_own === true && resultMatchesOwnProfile(profile, result)) return true;
+
+  return false;
+}
+
 export default function DisputeVerdictButton({
   result,
+  profile = null,
+  supervisorTeams = [],
   onSubmitted,
   panelMode = "drawer",
   hideButton = false,
@@ -66,6 +148,10 @@ export default function DisputeVerdictButton({
   const open = isControlled ? controlledOpen : internalOpen;
   const payload = useMemo(() => buildResultPayload(result || {}), [result]);
   const canOpen = Boolean(payload.result_id || payload.conversation_id);
+  const allowedToDispute = useMemo(
+    () => canUserDisputeResult(profile, supervisorTeams, result || {}),
+    [profile, supervisorTeams, result]
+  );
 
   useEffect(() => {
     setSubmitted(false);
@@ -89,6 +175,11 @@ export default function DisputeVerdictButton({
     setMessage("");
 
     if (submitted) return;
+
+    if (!allowedToDispute) {
+      setError("You do not have permission to dispute this result.");
+      return;
+    }
 
     if (!normalizeText(reason)) {
       setError("Please write the reason before submitting the dispute.");
@@ -139,7 +230,25 @@ export default function DisputeVerdictButton({
     }
   }
 
-  const panel = open ? (
+  if (!allowedToDispute && !hideButton) return null;
+
+  const unauthorizedPanel = open && !allowedToDispute ? (
+    <div className={panelMode === "inline" ? "dispute-panel dispute-panel-inline" : "dispute-panel dispute-panel-drawer"}>
+      <div className="dispute-panel-head">
+        <div>
+          <p>Review Status Dispute</p>
+          <h2>Permission Required</h2>
+          <span>You do not have permission to dispute this result. You can only dispute your own result, your team member’s result, or any result if your role has that permission enabled.</span>
+        </div>
+        <button type="button" className="close-btn" onClick={() => setOpen(false)}>×</button>
+      </div>
+      <div className="dispute-panel-actions">
+        <button type="button" className="secondary-btn" onClick={() => setOpen(false)}>Close</button>
+      </div>
+    </div>
+  ) : null;
+
+  const panel = open && allowedToDispute ? (
     <form
       className={panelMode === "inline" ? "dispute-panel dispute-panel-inline" : "dispute-panel dispute-panel-drawer"}
       onSubmit={submitDispute}
@@ -195,19 +304,21 @@ export default function DisputeVerdictButton({
           type="button"
           className="mini-dispute-btn"
           onClick={() => {
+            if (!allowedToDispute) return;
             if (onOpenRequest) {
               onOpenRequest(result || {}, payload);
               return;
             }
             setOpen(true);
           }}
-          disabled={!canOpen || submitted}
+          disabled={!canOpen || submitted || !allowedToDispute}
           title={!canOpen ? "This row does not have enough saved result data to dispute." : submitted ? "A dispute request has already been submitted from this screen." : "Dispute this Review Status verdict"}
         >
           {submitted ? "Dispute Request Submitted" : "Dispute Verdict"}
         </button>
       ) : null}
 
+      {unauthorizedPanel}
       {panel}
 
       <style jsx global>{`
